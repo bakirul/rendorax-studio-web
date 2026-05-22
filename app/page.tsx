@@ -1,10 +1,67 @@
+"use client";
+
+import { useState, useEffect } from "react";
 import Navbar from "@/components/Navbar";
 import Link from "next/link";
 import Footer from "@/components/Footer";
 
 export default function Home() {
+  const [loopKey, setLoopKey] = useState(0);
+
+  // ১৪ সেকেন্ড পর পর পুরো অ্যানিমেশনটি কোনো জার্কিং ছাড়াই স্মুথলি রিসেট হবে
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setLoopKey((prev) => prev + 1);
+    }, 14000); // 14s Loop Duration
+    return () => clearInterval(interval);
+  }, []);
+
+  const heroText =
+    "Film, animation, and television workflows shaped inside real broadcast environments.";
+  const words = heroText.split(" ");
+
   return (
     <main className="min-h-screen flex flex-col bg-bg-body text-text-gray font-main overflow-x-hidden selection:bg-gold-primary selection:text-black">
+      {/* 🌟 Custom Keyframes for Relaxed Cut-in & Smooth Zoom */}
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+          /* শব্দগুলো কাট-কাট করে আসার অ্যানিমেশন */
+          @keyframes wordCutIn {
+            0% { opacity: 0; }
+            100% { opacity: 1; }
+          }
+          
+          /* পুরো বাক্য আসার পর স্মুথ জুম এবং ফেইড-আউট অ্যানিমেশন */
+          @keyframes containerZoom {
+            0%, 35% { 
+              transform: scale(1); 
+              opacity: 1; 
+              color: #9ca3af; /* text-gray */
+            }
+            50%, 85% { 
+              transform: scale(1.05); /* Smooth, comfortable slight zoom */
+              opacity: 1; 
+              color: #ffffff; /* Slightly brighter when zoomed */
+            }
+            95%, 100% { 
+              transform: scale(1.05); 
+              opacity: 0; /* Smooth fade out before loop restarts */
+            }
+          }
+
+          .word-cut {
+            opacity: 0;
+            animation: wordCutIn 0.01s forwards; 
+          }
+
+          .zoom-sequence {
+            animation: containerZoom 14s ease-in-out forwards;
+          }
+        `,
+        }}
+      />
+
       {/* Navigation */}
       <Navbar />
 
@@ -23,10 +80,23 @@ export default function Home() {
           </em>
         </h1>
 
-        <p className="text-[1.2rem] max-w-[600px] mb-14 font-light text-text-gray">
-          Film, animation, and television workflows shaped inside real broadcast
-          environments.
-        </p>
+        {/* 🌟 Animated Sequence Section (Relaxed Cut-in + Smooth Zoom) */}
+        <div className="h-[60px] flex items-center justify-center mb-14">
+          <p
+            key={loopKey}
+            className="text-[1.2rem] max-w-[600px] font-light leading-relaxed flex flex-wrap justify-center zoom-sequence"
+          >
+            {words.map((word, i) => (
+              <span
+                key={i}
+                className="inline-block word-cut"
+                style={{ animationDelay: `${i * 0.4}s` }} // প্রতিটি শব্দ ০.৪ সেকেন্ড পর পর আসবে (চোখে আরাম লাগবে)
+              >
+                {word}&nbsp;
+              </span>
+            ))}
+          </p>
+        </div>
 
         <div className="flex flex-col sm:flex-row gap-8 items-center">
           <Link
@@ -79,9 +149,8 @@ export default function Home() {
           </div>
         </div>
 
-        {/* 7 Grid Layout Structure with Center Alignment for the last item */}
+        {/* 7 Grid Layout Structure */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {/* Card 1: Essential Editing */}
           <Link
             href="/services/video-editing"
             className="group bg-bg-panel p-10 md:p-12 border border-white/5 hover:border-gold-primary/50 hover:-translate-y-2 transition-all duration-400 block bg-gradient-to-b hover:from-bg-panel hover:to-[#141414]"
@@ -95,7 +164,6 @@ export default function Home() {
             </p>
           </Link>
 
-          {/* Card 2: Animation & Dub */}
           <Link
             href="/services/video-editing"
             className="group bg-bg-panel p-10 md:p-12 border border-white/5 hover:border-gold-primary/50 hover:-translate-y-2 transition-all duration-400 block bg-gradient-to-b hover:from-bg-panel hover:to-[#141414]"
@@ -109,7 +177,6 @@ export default function Home() {
             </p>
           </Link>
 
-          {/* Card 3: Audio Mastering */}
           <Link
             href="/services/audio-mastering"
             className="group bg-bg-panel p-10 md:p-12 border border-white/5 hover:border-gold-primary/50 hover:-translate-y-2 transition-all duration-400 block bg-gradient-to-b hover:from-bg-panel hover:to-[#141414]"
@@ -123,7 +190,6 @@ export default function Home() {
             </p>
           </Link>
 
-          {/* Card 4: Cinematic Color Grading */}
           <Link
             href="/services/color-grading"
             className="group bg-bg-panel p-10 md:p-12 border border-white/5 hover:border-gold-primary/50 hover:-translate-y-2 transition-all duration-400 block bg-gradient-to-b hover:from-bg-panel hover:to-[#141414]"
@@ -137,7 +203,6 @@ export default function Home() {
             </p>
           </Link>
 
-          {/* Card 5: Motion Graphics & VFX */}
           <Link
             href="/services/motion-graphics"
             className="group bg-bg-panel p-10 md:p-12 border border-white/5 hover:border-gold-primary/50 hover:-translate-y-2 transition-all duration-400 block bg-gradient-to-b hover:from-bg-panel hover:to-[#141414]"
@@ -151,7 +216,6 @@ export default function Home() {
             </p>
           </Link>
 
-          {/* Card 6: Archival & Restoration */}
           <Link
             href="/services/restoration"
             className="group bg-bg-panel p-10 md:p-12 border border-white/5 hover:border-gold-primary/50 hover:-translate-y-2 transition-all duration-400 block bg-gradient-to-b hover:from-bg-panel hover:to-[#141414]"
@@ -165,7 +229,6 @@ export default function Home() {
             </p>
           </Link>
 
-          {/* Card 7: Podcast Editing (NEW & Centered on Large Screens) */}
           <Link
             href="/podcast"
             className="group bg-bg-panel p-10 md:p-12 border border-white/5 hover:border-gold-primary/50 hover:-translate-y-2 transition-all duration-400 block bg-gradient-to-b hover:from-bg-panel hover:to-[#141414] lg:col-start-2"
@@ -240,7 +303,8 @@ export default function Home() {
           </li>
         </ul>
       </section>
-      {/* 5.5 CLIENT TESTIMONIALS & TRUSTPILOT (UPDATED WITH VIDEO & IMAGES) */}
+
+      {/* 5.5 CLIENT TESTIMONIALS & TRUSTPILOT */}
       <section className="w-full py-32 bg-black/40 border-y border-white/5 relative overflow-hidden">
         {/* Subtle Background Glow */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[300px] bg-gold-primary blur-[150px] opacity-5 -z-10 pointer-events-none"></div>
@@ -275,18 +339,14 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Testimonial Grid (Mixed: Video + Text/Image) */}
+          {/* Testimonial Grid */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {/* Card 1: VIDEO TESTIMONIAL */}
             <div className="relative aspect-[4/5] md:aspect-auto md:h-full bg-black border border-white/5 overflow-hidden group cursor-pointer hover:border-gold-primary/50 transition-all duration-500 shadow-2xl">
-              {/* Video Thumbnail Background */}
               <img
                 src="https://images.unsplash.com/photo-1560250097-0b93528c311a?q=80&w=1974&auto=format&fit=crop"
                 alt="Client Video Testimonial"
                 className="absolute inset-0 w-full h-full object-cover opacity-50 group-hover:opacity-30 group-hover:scale-105 transition-all duration-700"
               />
-
-              {/* Play Button Overlay */}
               <div className="absolute inset-0 flex items-center justify-center z-10">
                 <div className="w-16 h-16 rounded-full bg-gold-primary/90 text-black flex items-center justify-center group-hover:scale-110 transition-transform shadow-[0_0_30px_rgba(212,175,55,0.4)]">
                   <svg
@@ -300,8 +360,6 @@ export default function Home() {
                   </svg>
                 </div>
               </div>
-
-              {/* Client Info Overlay (Bottom) */}
               <div className="absolute bottom-0 left-0 w-full p-6 bg-gradient-to-t from-black via-black/90 to-transparent z-20">
                 <div className="flex gap-1 text-gold-primary mb-3 text-xs">
                   ★★★★★
@@ -328,7 +386,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Card 2: TEXT + IMAGE + RATING */}
             <div className="bg-bg-panel p-8 border border-white/5 hover:border-gold-primary/30 transition-colors flex flex-col justify-between">
               <div>
                 <div className="flex gap-1 text-gold-primary mb-6 text-sm">
@@ -342,7 +399,6 @@ export default function Home() {
                 </p>
               </div>
               <div className="flex items-center gap-4 pt-6 border-t border-white/5">
-                {/* Real Client Image */}
                 <img
                   src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?q=80&w=1976&auto=format&fit=crop"
                   alt="Sarah Jenkins"
@@ -359,7 +415,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Card 3: TEXT + IMAGE + RATING */}
             <div className="bg-bg-panel p-8 border border-white/5 hover:border-gold-primary/30 transition-colors flex flex-col justify-between">
               <div>
                 <div className="flex gap-1 text-gold-primary mb-6 text-sm">
@@ -373,7 +428,6 @@ export default function Home() {
                 </p>
               </div>
               <div className="flex items-center gap-4 pt-6 border-t border-white/5">
-                {/* Real Client Image */}
                 <img
                   src="https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?q=80&w=1974&auto=format&fit=crop"
                   alt="David R."
@@ -392,6 +446,7 @@ export default function Home() {
           </div>
         </div>
       </section>
+
       {/* 6. FINAL CTA */}
       <section className="w-full py-32 text-center">
         <div className="max-w-3xl mx-auto px-6">
@@ -410,7 +465,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Global Footer */}
       <Footer />
     </main>
   );
