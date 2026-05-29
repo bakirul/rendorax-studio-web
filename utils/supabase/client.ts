@@ -1,4 +1,4 @@
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { createBrowserClient } from "@supabase/ssr";
 
 export function createClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -8,6 +8,5 @@ export function createClient() {
     throw new Error("Supabase URL or Anon Key is missing!");
   }
 
-  // এটি কুকির ঝামেলায় না গিয়ে সরাসরি ব্রাউজারের Local Storage এ সেশন সেভ করবে!
-  return createSupabaseClient(supabaseUrl, supabaseAnonKey);
+  return createBrowserClient(supabaseUrl, supabaseAnonKey);
 }
