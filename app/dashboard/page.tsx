@@ -40,7 +40,7 @@ const AppearanceMenu = ({
             <svg
               xmlns="http://www.w3.org/2000/svg"
               width="14"
-              height="14"
+                  height="14"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -251,7 +251,7 @@ export default function DashboardPage() {
     }
   }, [user, currentFolder, fetchFiles]);
 
-  // 🛠️ NEW: KEYBOARD SHORTCUTS FOR ADVANCED VIDEO REVIEWS (Frame.io Style)
+  // 🛠️ KEYBOARD SHORTCUTS FOR ADVANCED VIDEO REVIEWS (Frame.io Style)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!videoRef.current || !previewFile?.isVideo) return;
@@ -829,8 +829,8 @@ export default function DashboardPage() {
 
                 <div className="flex-1 w-full h-full flex items-center justify-center p-4 lg:p-10 overflow-hidden">
                   {previewFile.isVideo ? (
-                    {/* 🛠️ UPGRADED: WRAPPER FOR VIDEO AND ADVANCED PLAYER CONTROLS */}
                     <div className="flex flex-col items-center gap-4 max-w-full max-h-full">
+                      {/* 🛠️ UPGRADED: WRAPPER FOR VIDEO AND ADVANCED PLAYER CONTROLS */}
                       <video
                         ref={videoRef}
                         src={previewFile.url}
