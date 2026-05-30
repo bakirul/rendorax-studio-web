@@ -7,57 +7,113 @@ interface Message {
   sender: "user" | "ai";
   text: string;
   image?: string | null;
+  langUsed?: string; // কোন ভাষায় উত্তর এসেছে তা ট্র্যাক করার জন্য
 }
 
 export default function ChatbotWidget() {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
-  const [selectedLang, setSelectedLang] = useState("en");
+  const [selectedLang, setSelectedLang] = useState("auto");
   
   // ⚡ কোর চ্যাট স্টেটস
   const [inputText, setInputText] = useState("");
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [isRecording, setIsRecording] = useState(false); // ভয়েস রেকর্ডিং স্টেট
+  const [isRecording, setIsRecording] = useState(false); 
+  const [isLoading, setIsLoading] = useState(false); 
   
-  // ডেমো চ্যাট বাবল দেখার জন্য ইনিশিয়াল মেসেজ
   const [messages, setMessages] = useState<Message[]>([
-    { id: "1", sender: "ai", text: "Hello! I am your Kachna AI assistant. How can I help you with your video review today?" }
+    { id: "1", sender: "ai", text: "Hello! I am your Kachna AI assistant. How can I help you with your video review today?", langUsed: "en" }
   ]);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const quickEmojis = ["😀", "😂", "😍", "👍", "🔥", "🚀", "🎉", "❤️", "🙏", "✨"];
   
-  // জেমিনাই স্টাইল কুইক সাজেশনস
   const suggestions = [
     "💡 How to leave a timestamped comment?",
     "📁 Can I upload multiple video versions?",
     "🔒 Is my video private?",
   ];
 
-  // মেসেজ সেন্ড করার হ্যান্ডলার (UI টেস্ট করার জন্য)
-  const handleSendMessage = (textToSend = inputText) => {
+  // 🔊 টেক্সট টু স্পিচ (শোনার জন্য ফাংশন)
+  const handleSpeak = (text: string, langCode: string) => {
+    if (typeof window === "undefined" || !window.speechSynthesis) {
+      alert("Text-to-speech is not supported in this browser.");
+      return;
+    }
+    
+    window.speechSynthesis.cancel(); // আগের কোনো সাউন্ড চালু থাকলে বন্ধ করা
+    const utterance = new SpeechSynthesisUtterance(text);
+    
+    // ব্রাউজারের ভয়েস ল্যাঙ্গুয়েজ ম্যাপিং
+    const voiceMap: Record<string, string> = {
+      bn: "bn-BD", en: "en-US", es: "es-ES", ar: "ar-SA", 
+      fr: "fr-FR", de: "de-DE", zh: "zh-CN", hi: "hi-IN", ja: "ja-JP"
+    };
+    
+    utterance.lang = voiceMap[langCode] || "en-US";
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const handleSendMessage = async (textToSend = inputText) => {
     if (!textToSend.trim() && !attachedImage) return;
+    if (isLoading) return;
+
+    const userText = textToSend;
+    const userImg = attachedImage;
 
     const newUserMessage: Message = {
       id: Date.now().toString(),
       sender: "user",
-      text: textToSend,
-      image: attachedImage,
+      text: userText,
+      image: userImg,
     };
 
     setMessages((prev) => [...prev, newUserMessage]);
     setInputText("");
     setAttachedImage(null);
+    setIsLoading(true); 
 
-    // AI রেসপন্সের একটি ডেমো অ্যাকশন (২ সেকেন্ড পর)
-    setTimeout(() => {
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: userText,
+          selectedLanguage: selectedLang, 
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.text) {
+        setMessages((prev) => [
+          ...prev,
+          { 
+            id: (Date.now() + 1).toString(), 
+            sender: "ai", 
+            text: data.text,
+            langUsed: selectedLang === "auto" ? "en" : selectedLang // স্পিচ ল্যাঙ্গুয়েজ ট্র্যাকিং
+          }
+        ]);
+      } else {
+        throw new Error(data.error || "Failed to get response");
+      }
+    } catch (error) {
+      console.error("API Error:", error);
       setMessages((prev) => [
         ...prev,
-        { id: (Date.now() + 1).toString(), sender: "ai", text: "Got it! I am processing your request regarding the video pipeline..." }
+        { 
+          id: (Date.now() + 1).toString(), 
+          sender: "ai", 
+          text: "Sorry, I am having trouble connecting to the server. Please try again.",
+          langUsed: "en"
+        }
       ]);
-    }, 1000);
+    } finally {
+      setIsLoading(false); 
+    }
   };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -71,7 +127,7 @@ export default function ChatbotWidget() {
 
   const clearChat = () => {
     if(confirm("Clear current conversation?")) {
-      setMessages([{ id: "1", sender: "ai", text: "Hello! Fresh start. How can I help you now?" }]);
+      setMessages([{ id: "1", sender: "ai", text: "Hello! Fresh start. How can I help you now?", langUsed: "en" }]);
     }
   };
 
@@ -104,26 +160,33 @@ export default function ChatbotWidget() {
       {isOpen && (
         <div className={getWindowClassName()}>
           
-          {/* 🔝 হেডার এরিয়া */}
+          {/* 🔝 হেডার এরিয়া */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-900 bg-zinc-900/40 rounded-t-xl">
             <div className="flex items-center space-x-2.5">
               <div className="w-2.5 h-2.5 rounded-full bg-[#d4af37] shadow-[0_0_8px_#d4af37]" />
               <span className="text-sm font-medium text-zinc-200">Kachna AI</span>
               
+              {/* 🌐 বড় করা গ্লোবাল ল্যাঙ্গুয়েজ ড্রপডাউন */}
               <select
                 value={selectedLang}
                 onChange={(e) => setSelectedLang(e.target.value)}
-                className="bg-zinc-900 border border-zinc-800 text-xs text-zinc-400 rounded px-1.5 py-0.5 focus:outline-none"
+                className="bg-zinc-900 border border-zinc-800 text-xs text-zinc-400 rounded px-1.5 py-0.5 focus:outline-none cursor-pointer max-w-[120px]"
               >
-                <option value="en">English</option>
-                <option value="bn">বাংলা</option>
-                <option value="es">Español</option>
+                <option value="auto">🌐 Auto Detect</option>
+                <option value="bn">🇧🇩 বাংলা</option>
+                <option value="en">🇺🇸 English</option>
+                <option value="es">🇪🇸 Español</option>
+                <option value="ar">🇸🇦 العربية</option>
+                <option value="fr">🇫🇷 Français</option>
+                <option value="de">🇩🇪 Deutsch</option>
+                <option value="zh">🇨🇳 中文</option>
+                <option value="hi">🇮🇳 हिन्दी</option>
+                <option value="ja">🇯🇵 日本語</option>
               </select>
             </div>
 
             {/* হেডার অ্যাকশন কন্ট্রোলস */}
             <div className="flex items-center space-x-2 text-zinc-500">
-              {/* ক্লিয়ার চ্যাট বাটন */}
               {!isMinimized && (
                 <button onClick={clearChat} className="hover:text-zinc-300 p-1 text-xs" title="Clear conversation">
                   🔄
@@ -143,12 +206,13 @@ export default function ChatbotWidget() {
             </div>
           </div>
 
-          {/* 💬 মেসেজ বডি (রিয়েলটাইম স্ক্রোলিং এবং প্রিমিয়াম স্পেসিং) */}
+          {/* 💬 মেসেজ বডি */}
           {!isMinimized && (
             <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-zinc-950/20 custom-scrollbar">
               {messages.map((msg) => (
-                <div key={msg.id} className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[80%] p-3 rounded-xl text-sm border ${
+                <div key={msg.id} className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"} items-end space-x-1`}>
+                  
+                  <div className={`max-w-[80%] p-3 rounded-xl text-sm border relative group ${
                     msg.sender === "user" 
                       ? "bg-zinc-900 border-zinc-800 text-zinc-200 rounded-tr-none" 
                       : "bg-[#d4af37]/5 border-[#d4af37]/10 text-zinc-300 rounded-tl-none"
@@ -157,9 +221,32 @@ export default function ChatbotWidget() {
                       <img src={msg.image} alt="Sent file" className="w-40 h-auto rounded-lg mb-2 border border-zinc-800" />
                     )}
                     <p className="leading-relaxed whitespace-pre-wrap">{msg.text}</p>
+
+                    {/* 🔊 স্পীকার বাটন (শুধু AI মেসেজের জন্য এবং হোভার করলে দেখা যাবে) */}
+                    {msg.sender === "ai" && (
+                      <button 
+                        onClick={() => handleSpeak(msg.text, msg.langUsed || "en")}
+                        className="absolute -bottom-6 left-1 text-xs text-zinc-500 hover:text-[#d4af37] transition-colors"
+                        title="Listen Response"
+                      >
+                        🔊 Listen
+                      </button>
+                    )}
                   </div>
+
                 </div>
               ))}
+
+              {/* ✨ টাইপিং ডট অ্যানিমেশন */}
+              {isLoading && (
+                <div className="flex justify-start">
+                  <div className="max-w-[80%] p-3 rounded-xl text-sm border bg-[#d4af37]/5 border-[#d4af37]/10 text-zinc-400 rounded-tl-none flex items-center space-x-1">
+                    <span className="animate-bounce">●</span>
+                    <span className="animate-bounce [animation-delay:0.2s]">●</span>
+                    <span className="animate-bounce [animation-delay:0.4s]">●</span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -167,7 +254,6 @@ export default function ChatbotWidget() {
           {!isMinimized && (
             <div className="p-4 border-t border-zinc-900 bg-zinc-950 rounded-b-xl">
               
-              {/* 💡 জেমিনাই স্টাইল কুইক সাজেশনস (যখন কোনো মেসেজ বেশি থাকে না) */}
               {messages.length <= 1 && (
                 <div className="flex flex-wrap gap-2 mb-3">
                   {suggestions.map((sug, idx) => (
@@ -182,7 +268,6 @@ export default function ChatbotWidget() {
                 </div>
               )}
 
-              {/* 😊 ইমোজি পিকার পপওভার */}
               {showEmojiPicker && (
                 <div className="absolute bottom-24 left-4 bg-zinc-900 border border-zinc-800 p-2 rounded-lg shadow-xl grid grid-cols-5 gap-1.5 z-50">
                   {quickEmojis.map((emoji) => (
@@ -193,7 +278,6 @@ export default function ChatbotWidget() {
                 </div>
               )}
 
-              {/* 🖼️ ইমেজ প্রিভিউ বক্স */}
               {attachedImage && (
                 <div className="mb-3 relative inline-block">
                   <img src={attachedImage} alt="Preview" className="w-14 h-14 object-cover rounded-lg border border-zinc-800" />
@@ -203,10 +287,8 @@ export default function ChatbotWidget() {
 
               <input type="file" ref={fileInputRef} onChange={handleImageChange} accept="image/*" className="hidden" />
 
-              {/* মেইন ইনপুট কন্টেইনার */}
               <div className="flex items-end bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 focus-within:border-[#d4af37]/40 transition-colors">
                 
-                {/* অ্যাকশন বাটন গ্রুপ (আইকনস) */}
                 <div className="flex items-center space-x-1 pb-1">
                   <button onClick={() => fileInputRef.current?.click()} className="text-zinc-500 hover:text-[#d4af37] p-1 transition-colors" title="Upload Image">
                     📁
@@ -216,7 +298,6 @@ export default function ChatbotWidget() {
                   </button>
                 </div>
 
-                {/* 📝 স্মার্ট অটো-রিসাইজিং টেক্সট এরিয়া */}
                 <textarea
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
@@ -226,13 +307,12 @@ export default function ChatbotWidget() {
                       handleSendMessage();
                     }
                   }}
-                  placeholder={isRecording ? "Listening active..." : "Ask kachna AI... (Shift+Enter for new line)"}
-                  disabled={isRecording}
+                  placeholder={isRecording ? "Listening active..." : "Ask kachna AI..."}
+                  disabled={isRecording || isLoading}
                   rows={1}
                   className="w-full bg-transparent text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none px-2 resize-none max-h-32 py-1 scrollbar-none"
                 />
 
-                {/* 🎙️ ৫. একটিভ লাইভ ভয়েস রেকর্ড বাটন অ্যানিমেশনসহ */}
                 <button 
                   onClick={() => setIsRecording(!isRecording)} 
                   className={`p-1.5 rounded-full transition-all relative pb-1 ${
@@ -250,10 +330,10 @@ export default function ChatbotWidget() {
                   ) : "🎤"}
                 </button>
 
-                {/* 🚀 সেন্ড বাটন */}
                 <button 
                   onClick={() => handleSendMessage()}
-                  className="text-[#d4af37] hover:text-[#d4af37]/80 p-1.5 transition-colors pb-1" 
+                  disabled={isLoading}
+                  className={`p-1.5 transition-colors pb-1 ${isLoading ? "text-zinc-600 cursor-not-allowed" : "text-[#d4af37] hover:text-[#d4af37]/80"}`} 
                   title="Send Message"
                 >
                   🚀
