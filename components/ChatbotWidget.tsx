@@ -36,17 +36,22 @@ export default function ChatbotWidget() {
     "🔒 Is my video private?",
   ];
 
-  // 🔊 টেক্সট টু স্পিচ (শোনার জন্য ফাংশন)
-  const handleSpeak = (text: string, langCode: string) => {
+  // 🔊 আপডেট করা হ্যান্ডলার: পজ বা স্টপ করার সুবিধাসহ
+const handleSpeak = (text: string, langCode: string) => {
     if (typeof window === "undefined" || !window.speechSynthesis) {
       alert("Text-to-speech is not supported in this browser.");
       return;
     }
+  
+    // যদি বর্তমানে অডিও বাজতে থাকে, তবে তা বন্ধ করো (Stop Logic)
+    if (window.speechSynthesis.speaking) {
+      window.speechSynthesis.cancel();
+      return; // এখানেই থেমে যাবে
+    }
     
-    window.speechSynthesis.cancel(); // আগের কোনো সাউন্ড চালু থাকলে বন্ধ করা
+    // নতুন করে প্লে করার কোড
     const utterance = new SpeechSynthesisUtterance(text);
     
-    // ব্রাউজারের ভয়েস ল্যাঙ্গুয়েজ ম্যাপিং
     const voiceMap: Record<string, string> = {
       bn: "bn-BD", en: "en-US", es: "es-ES", ar: "ar-SA", 
       fr: "fr-FR", de: "de-DE", zh: "zh-CN", hi: "hi-IN", ja: "ja-JP"
