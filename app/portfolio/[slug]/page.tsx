@@ -1,6 +1,8 @@
+// app/portfolio/[slug]/page.tsx
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import Link from "next/link";
+import Image from "next/image"; // Next.js Image Component ইমপোর্ট করা হলো
 import { notFound } from "next/navigation";
 
 // Real Data - Kachna Media Portfolio Projects
@@ -18,7 +20,7 @@ const projectsDetail = [
       "Producing cinematic, long-form (2-hour+) historical documentaries required an intensive local AI workflow to restore archival footage and maintain consistent visual fidelity across lengthy timelines without overwhelming the rendering pipeline.",
     solution:
       "Architected a custom ComfyUI production pipeline on a high-performance local RTX setup, integrating frame-by-frame upscaling and strict LUFS-compliant audio mastering for premium, broadcast-grade YouTube delivery.",
-    videoUrl: "", // Add actual YouTube embed link if available
+    videoUrl: "",
   },
   {
     slug: "voiced-classics",
@@ -78,7 +80,14 @@ const projectsDetail = [
   },
 ];
 
-export default function CaseStudyPage({ params }) {
+// params এর টাইপ নির্ধারণ করে দেওয়া হলো (TypeScript Safety)
+interface PageProps {
+  params: {
+    slug: string;
+  };
+}
+
+export default function CaseStudyPage({ params }: PageProps) {
   // URL-এর slug অনুযায়ী নির্দিষ্ট প্রজেক্ট খুঁজে বের করা
   const project = projectsDetail.find((p) => p.slug === params.slug);
 
@@ -150,10 +159,15 @@ export default function CaseStudyPage({ params }) {
               </div>
             </div>
           ) : null}
-          <img
+
+          {/* Next.js Image Component দিয়ে রেন্ডারিং আরও ফাস্ট করা হলো */}
+          <Image
             src={project.heroImage}
             alt={project.title}
+            fill
+            priority
             className="w-full h-full object-cover filter grayscale-[20%] group-hover:grayscale-0 transition-all duration-700"
+            sizes="(max-width: 1280px) 100vw, 1200px"
           />
         </div>
       </section>
