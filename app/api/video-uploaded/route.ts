@@ -1,4 +1,3 @@
-// app/api/webhooks/video-uploaded/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import {
@@ -7,24 +6,24 @@ import {
   CreateJobCommandInput,
 } from "@aws-sdk/client-mediaconvert";
 
-// Initialize Supabase Admin Client (To bypass RLS and generate signed URLs)
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
-
-// Initialize AWS MediaConvert Client
-const emcClient = new MediaConvertClient({
-  region: process.env.AWS_REGION!,
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-  },
-  endpoint: process.env.AWS_MEDIACONVERT_ENDPOINT!, // e.g., https://xyz.mediaconvert.us-east-1.amazonaws.com
-});
-
 export async function POST(req: NextRequest) {
   try {
+    // 🚀 FIX: Moved clients INSIDE the function to prevent Vercel build crashes
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || "build-time-fallback-url",
+      process.env.SUPABASE_SERVICE_ROLE_KEY || "build-time-fallback-key",
+    );
+
+    const emcClient = new MediaConvertClient({
+      region: process.env.AWS_REGION || "us-east-1",
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID || "dummy-key",
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "dummy-secret",
+      },
+      endpoint:
+        process.env.AWS_MEDIACONVERT_ENDPOINT || "https://dummy.amazonaws.com",
+    });
+
     // 1. Authenticate the Webhook (Ensure it's actually from your Supabase project)
     const authHeader = req.headers.get("Authorization");
     if (authHeader !== `Bearer ${process.env.SUPABASE_WEBHOOK_SECRET}`) {
@@ -90,7 +89,7 @@ export async function POST(req: NextRequest) {
                     H264Settings: {
                       MaxBitrate: 3000000, // 3Mbps Proxy
                       RateControlMode: "QVBR",
-                      SceneChangeDetect: "TRANSITION_DETECTION", // 🚀 FIX: Correct AWS SDK v3 Enum String
+                      SceneChangeDetect: "TRANSITION_DETECTION",
                     },
                   },
                   Width: 1280,
