@@ -193,11 +193,15 @@ export default function DashboardHeader({
   setViewSettings,
   handleUpload,
   uploading,
+  isSidebarOpen,
+  onToggleSidebar,
 }: {
   viewSettings: any;
   setViewSettings: React.Dispatch<React.SetStateAction<any>>;
   handleUpload: (files: FileList | null) => Promise<void>;
   uploading: boolean;
+  isSidebarOpen?: boolean;
+  onToggleSidebar?: () => void;
 }) {
   const [isAppearanceOpen, setIsAppearanceOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -222,7 +226,30 @@ export default function DashboardHeader({
       )}
 
       <header className="h-14 bg-[#121217] border-b border-white/5 flex items-center justify-between px-6 shrink-0 z-40 relative">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          {onToggleSidebar && (
+            <button
+              onClick={onToggleSidebar}
+              className="text-gray-400 hover:text-white transition-colors focus:outline-none p-1.5 -ml-1 rounded hover:bg-white/5"
+              aria-label="Toggle Sidebar"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+              </svg>
+            </button>
+          )}
           <div className="w-8 h-8 rounded-full bg-[#d4af37] flex items-center justify-center text-black font-bold text-xs shadow-lg">
             K
           </div>

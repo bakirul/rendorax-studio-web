@@ -16,7 +16,7 @@ export default function VaultSidebar({
   const pathParts = currentFolder ? currentFolder.split("/") : [];
 
   return (
-    <aside className="w-60 bg-[#0a0a0f] border-r border-white/5 flex flex-col shrink-0 z-20">
+    <aside className="w-full h-full bg-[#0a0a0f] flex flex-col shrink-0">
       <div className="h-14 flex items-center justify-between px-5 border-b border-white/5 shrink-0">
         <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Directories</h3>
         <button onClick={onCreateFolder} className="text-[#d4af37] hover:text-white transition-colors" title="New Folder">

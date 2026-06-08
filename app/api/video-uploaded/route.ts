@@ -10,8 +10,8 @@ export async function POST(req: NextRequest) {
   try {
     // 🚀 FIX: Moved clients INSIDE the function to prevent Vercel build crashes
     const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL || "build-time-fallback-url",
-      process.env.SUPABASE_SERVICE_ROLE_KEY || "build-time-fallback-key",
+      process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder-project.supabase.co",
+      process.env.SUPABASE_SERVICE_ROLE_KEY || "placeholder-token-for-build-pass",
     );
 
     const emcClient = new MediaConvertClient({
