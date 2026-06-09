@@ -567,16 +567,17 @@ export default function DashboardPage() {
       if (previewFile?.name === oldName) setPreviewFile(null);
     });
 
-  const folders = vaultItems.filter((item) => !item.metadata);
-  const files = vaultItems.filter((item) => item.metadata);
-  const filteredFiles = files.filter((item) => {
+  const folders = (vaultItems || []).filter((item) => !item?.metadata);
+  const files = (vaultItems || []).filter((item) => item?.metadata);
+  const filteredFiles = (files || []).filter((item) => {
+    if (!item?.name) return false;
     const originalName = item.name
       .substring(item.name.indexOf("_") + 1)
       .toLowerCase();
-    return originalName.includes(searchQuery.toLowerCase());
+    return originalName.includes((searchQuery || "").toLowerCase());
   });
-  const allVideoFiles = files.filter(
-    (f) => f.name.match(/\.(mp4|webm|ogg|mov|mxf)$/i) !== null,
+  const allVideoFiles = (files || []).filter(
+    (f) => f?.name?.match(/\.(mp4|webm|ogg|mov|mxf)$/i) !== null,
   );
 
   const aspectClass =

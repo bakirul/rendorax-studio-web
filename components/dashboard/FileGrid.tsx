@@ -43,12 +43,13 @@ export default function FileGrid({
         gridTemplateColumns: `repeat(auto-fill, minmax(${gridColumnSize}px, 1fr))`,
       }}
     >
-      {filteredFiles.map((item) => {
+      {(filteredFiles || []).map((item) => {
+        if (!item?.name) return null;
         const originalName = item.name.substring(item.name.indexOf("_") + 1);
         const isVideoFile = item.name.match(/\.(mp4|webm|ogg|mov|mxf)$/i);
         const isImage = item.name.match(/\.(jpg|jpeg|png|gif|webp)$/i);
         const isSelected = previewFile?.name === item.name;
-        const fileUrl = fileUrls[item.name];
+        const fileUrl = fileUrls?.[item.name];
 
         return (
           <div
