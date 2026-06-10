@@ -40,7 +40,7 @@ export default function GlobalLiveWidget() {
     if (!user) return; // লগইন না থাকলে সকেট কানেক্ট হবে না
 
     const newSocket = io(
-      process.env.NEXT_PUBLIC_WS_URL || "http://localhost:3001",
+      process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001",
     );
     setSocket(newSocket);
 

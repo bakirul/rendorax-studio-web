@@ -57,8 +57,8 @@ export default function LiveSessionWidget({
   roomId,
   user,
 }: LiveSessionProps) {
-  const [hasHydrated, setHasHydrated] = useState(false);
   const { isLiveMinimized, setIsLiveMinimized, userLanguage } = useDashboardStore();
+  const [hasHydrated, setHasHydrated] = useState(false);
   const [hasJoined, setHasJoined] = useState(false);
 
   const [peers, setPeers] = useState<{ peerID: string; peer: Peer.Instance }[]>([]);

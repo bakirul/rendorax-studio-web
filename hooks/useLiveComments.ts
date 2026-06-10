@@ -37,7 +37,7 @@ export const useLiveComments = (
     if (!user) return; // Only connect if user is loaded
 
     const newSocket = io(
-      process.env.NEXT_PUBLIC_WS_URL || "http://localhost:4000",
+      process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001",
     );
     setSocket(newSocket);
 

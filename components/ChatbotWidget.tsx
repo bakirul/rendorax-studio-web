@@ -12,11 +12,11 @@ interface Message {
 }
 
 export default function ChatbotWidget() {
+  const userLanguage = useDashboardStore((state) => state.userLanguage);
   const [hasHydrated, setHasHydrated] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
-  const userLanguage = useDashboardStore((state) => state.userLanguage);
   
   // ⚡ কোর চ্যাট স্টেটস
   const [inputText, setInputText] = useState("");
@@ -29,11 +29,12 @@ export default function ChatbotWidget() {
     { id: "1", sender: "ai", text: "Hello! I am your Kachna AI assistant. How can I help you with your video review today?", langUsed: "en" }
   ]);
   
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   React.useEffect(() => {
     setHasHydrated(true);
   }, []);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const quickEmojis = ["😀", "😂", "😍", "👍", "🔥", "🚀", "🎉", "❤️", "🙏", "✨"];
   
   const suggestions = [

@@ -38,13 +38,13 @@ export default function DashboardHeader({
   uploading: boolean;
   onToggleScreenShare?: () => void;
 }) {
-  const [isAppearanceOpen, setIsAppearanceOpen] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const supabase = createClient();
 
   const { isSidebarOpen, setIsSidebarOpen, isEditor, isScreenSharing } = useDashboardStore();
   const [hasHydrated, setHasHydrated] = useState(false);
+  const [isAppearanceOpen, setIsAppearanceOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
     setHasHydrated(true);

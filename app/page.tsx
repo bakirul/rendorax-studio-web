@@ -205,7 +205,7 @@ export default function Home() {
             </div>
             <div className="lg:w-1/2 order-1 lg:order-2 w-full aspect-video bg-[#0a0a0a] border border-white/10 rounded-lg relative overflow-hidden group shadow-[0_0_50px_rgba(255,255,255,0.03)] hover:shadow-[0_0_50px_rgba(212,175,55,0.1)] transition-all">
               <img
-                src="/gifs/project-management.gif"
+                src="/project-management.gif"
                 alt="Project Management Dashboard Demo"
                 className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity"
               />
@@ -216,7 +216,7 @@ export default function Home() {
           <div className="flex flex-col lg:flex-row items-center gap-12 lg:gap-20">
             <div className="lg:w-1/2 w-full aspect-video bg-[#0a0a0a] border border-white/10 rounded-lg relative overflow-hidden group shadow-[0_0_50px_rgba(255,255,255,0.03)] hover:shadow-[0_0_50px_rgba(212,175,55,0.1)] transition-all">
               <img
-                src="/gifs/broadcast-delivery.gif"
+                src="/broadcast-delivery.gif"
                 alt="Broadcast Delivery Timeline Demo"
                 className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity"
               />
@@ -275,7 +275,7 @@ export default function Home() {
             </div>
             <div className="lg:w-1/2 order-1 lg:order-2 w-full aspect-video bg-[#0a0a0a] border border-white/10 rounded-lg relative overflow-hidden group shadow-[0_0_50px_rgba(255,255,255,0.03)] hover:shadow-[0_0_50px_rgba(212,175,55,0.1)] transition-all">
               <img
-                src="/gifs/centralized-post.gif"
+                src="/centralized-post.gif"
                 alt="Multi-department workflow demo"
                 className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity"
               />
@@ -286,7 +286,7 @@ export default function Home() {
           <div className="flex flex-col lg:flex-row items-center gap-12 lg:gap-20">
             <div className="lg:w-1/2 w-full aspect-video bg-[#0a0a0a] border border-white/10 rounded-lg relative overflow-hidden group shadow-[0_0_50px_rgba(255,255,255,0.03)] hover:shadow-[0_0_50px_rgba(212,175,55,0.1)] transition-all">
               <img
-                src="/gifs/automation-ai.gif"
+                src="/automation-ai.gif"
                 alt="AI Automation nodes demo"
                 className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity"
               />
