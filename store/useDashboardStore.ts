@@ -51,6 +51,10 @@ interface DashboardState {
   // Project state
   projectStage: string;
   setProjectStage: (stage: string) => void;
+
+  // Multi-lingual State
+  userLanguage: string;
+  setUserLanguage: (lang: string) => void;
 }
 
 export const useDashboardStore = create<DashboardState>((set) => ({
@@ -98,4 +102,7 @@ export const useDashboardStore = create<DashboardState>((set) => ({
   
   projectStage: "Rough Cut", // Default
   setProjectStage: (stage) => set({ projectStage: stage }),
+
+  userLanguage: "en-US", // Default to English
+  setUserLanguage: (lang) => set({ userLanguage: lang }),
 }));

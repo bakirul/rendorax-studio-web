@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef } from "react";
+import { useDashboardStore } from "@/store/useDashboardStore";
 
 interface Message {
   id: string;
@@ -14,7 +15,7 @@ export default function ChatbotWidget() {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
-  const [selectedLang, setSelectedLang] = useState("auto");
+  const userLanguage = useDashboardStore((state) => state.userLanguage);
   
   // ⚡ কোর চ্যাট স্টেটস
   const [inputText, setInputText] = useState("");
@@ -86,7 +87,7 @@ const handleSpeak = (text: string, langCode: string) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: userText,
-          selectedLanguage: selectedLang, 
+          selectedLanguage: userLanguage, 
         }),
       });
 
@@ -99,7 +100,7 @@ const handleSpeak = (text: string, langCode: string) => {
             id: (Date.now() + 1).toString(), 
             sender: "ai", 
             text: data.text,
-            langUsed: selectedLang === "auto" ? "en" : selectedLang // স্পিচ ল্যাঙ্গুয়েজ ট্র্যাকিং
+            langUsed: userLanguage // স্পিচ ল্যাঙ্গুয়েজ ট্র্যাকিং
           }
         ]);
       } else {
@@ -170,24 +171,7 @@ const handleSpeak = (text: string, langCode: string) => {
             <div className="flex items-center space-x-2.5">
               <div className="w-2.5 h-2.5 rounded-full bg-[#d4af37] shadow-[0_0_8px_#d4af37]" />
               <span className="text-sm font-medium text-zinc-200">Kachna AI</span>
-              
-              {/* 🌐 বড় করা গ্লোবাল ল্যাঙ্গুয়েজ ড্রপডাউন */}
-              <select
-                value={selectedLang}
-                onChange={(e) => setSelectedLang(e.target.value)}
-                className="bg-zinc-900 border border-zinc-800 text-xs text-zinc-400 rounded px-1.5 py-0.5 focus:outline-none cursor-pointer max-w-[120px]"
-              >
-                <option value="auto">🌐 Auto Detect</option>
-                <option value="bn">🇧🇩 বাংলা</option>
-                <option value="en">🇺🇸 English</option>
-                <option value="es">🇪🇸 Español</option>
-                <option value="ar">🇸🇦 العربية</option>
-                <option value="fr">🇫🇷 Français</option>
-                <option value="de">🇩🇪 Deutsch</option>
-                <option value="zh">🇨🇳 中文</option>
-                <option value="hi">🇮🇳 हिन्दी</option>
-                <option value="ja">🇯🇵 日本語</option>
-              </select>
+              <span className="text-[10px] bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded-full uppercase">{userLanguage}</span>
             </div>
 
             {/* হেডার অ্যাকশন কন্ট্রোলস */}

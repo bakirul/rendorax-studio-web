@@ -34,7 +34,7 @@ const setMediaBitrate = (sdp: string, bitrate: number) => {
   return lines.join('\r\n');
 };
 
-const VideoPeer = ({ peer }: { peer: Peer.Instance }) => {
+const VideoPeer = ({ peer, isMuted }: { peer: Peer.Instance; isMuted?: boolean }) => {
   const ref = useRef<HTMLVideoElement>(null);
   useEffect(() => {
     peer.on("stream", (stream) => {
@@ -46,6 +46,7 @@ const VideoPeer = ({ peer }: { peer: Peer.Instance }) => {
       ref={ref}
       autoPlay
       playsInline
+      muted={isMuted}
       className="w-10 h-10 object-cover rounded-full border border-[#d4af37] shadow-md bg-black shrink-0"
     />
   );
@@ -56,7 +57,7 @@ export default function LiveSessionWidget({
   roomId,
   user,
 }: LiveSessionProps) {
-  const { isLiveMinimized, setIsLiveMinimized } = useDashboardStore();
+  const { isLiveMinimized, setIsLiveMinimized, userLanguage } = useDashboardStore();
   const [hasJoined, setHasJoined] = useState(false);
 
   const [peers, setPeers] = useState<{ peerID: string; peer: Peer.Instance }[]>([]);
@@ -74,9 +75,8 @@ export default function LiveSessionWidget({
   const captionTimeout = useRef<NodeJS.Timeout | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const syntheticDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioProcessorRef = useRef<ScriptProcessorNode | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
-  const translatedStreamRef = useRef<MediaStream | null>(null);
 
   const myVideo = useRef<HTMLVideoElement>(null);
   const peersRef = useRef<{ [socketId: string]: Peer.Instance }>({});
@@ -101,37 +101,43 @@ export default function LiveSessionWidget({
         if (myVideo.current) myVideo.current.srcObject = mediaStream;
 
         // --- AUDIO TRANSLATION PIPELINE SETUP ---
-        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
         syntheticDestRef.current = audioContextRef.current.createMediaStreamDestination();
         
-        translatedStreamRef.current = new MediaStream([
-          mediaStream.getVideoTracks()[0],
-          syntheticDestRef.current.stream.getAudioTracks()[0]
-        ]);
-
         try {
-          mediaRecorderRef.current = new MediaRecorder(mediaStream, { mimeType: "audio/webm;codecs=opus" });
-          mediaRecorderRef.current.ondataavailable = async (event) => {
-            if (event.data.size > 0 && isTranslationEnabledRef.current) {
-                const buffer = await event.data.arrayBuffer();
+          const source = audioContextRef.current.createMediaStreamSource(mediaStream);
+          const processor = audioContextRef.current.createScriptProcessor(4096, 1, 1);
+          audioProcessorRef.current = processor;
+          
+          source.connect(processor);
+          processor.connect(audioContextRef.current.destination);
+
+          processor.onaudioprocess = (e) => {
+            if (isTranslationEnabledRef.current) {
+                const inputData = e.inputBuffer.getChannelData(0);
+                const pcm16 = new Int16Array(inputData.length);
+                for (let i = 0; i < inputData.length; i++) {
+                    const s = Math.max(-1, Math.min(1, inputData[i]));
+                    pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                }
                 socket.emit("audio-chunk", {
                     roomId,
-                    chunk: buffer,
-                    senderId: user?.id
+                    chunk: pcm16.buffer,
+                    senderId: user?.id,
+                    senderLanguage: useDashboardStore.getState().userLanguage
                 });
             }
           };
-          mediaRecorderRef.current.start(250);
-        } catch(e) { console.error("MediaRecorder start failed", e); }
+        } catch(e) { console.error("AudioProcessor setup failed", e); }
 
         socket.emit("join-call", roomId, user?.email || "Team Member");
+        socket.emit("join-room-language", useDashboardStore.getState().userLanguage);
 
         socket.on("user-connected", (userId: string, socketId: string) => {
-          const activeStream = isTranslationEnabledRef.current ? translatedStreamRef.current! : localStreamRef.current!;
           const peer = new Peer({
             initiator: true,
             trickle: false,
-            stream: activeStream,
+            stream: mediaStream,
           });
 
           peer.on("signal", (signal: any) => {
@@ -150,11 +156,10 @@ export default function LiveSessionWidget({
         });
 
         socket.on("webrtc-offer", (data) => {
-          const activeStream = isTranslationEnabledRef.current ? translatedStreamRef.current! : localStreamRef.current!;
           const peer = new Peer({
             initiator: false,
             trickle: false,
-            stream: activeStream,
+            stream: mediaStream,
           });
 
           peer.on("signal", (signal: any) => {
@@ -185,7 +190,23 @@ export default function LiveSessionWidget({
           setPeers((prev) => prev.filter((p) => p.peerID !== socketId));
         });
 
-        socket.on("receive-chat-message", (msg) => {
+        socket.on("receive-chat-message", async (msg) => {
+          if (msg.senderLanguage && msg.senderLanguage !== userLanguage) {
+            try {
+              const res = await fetch("/api/translate-text", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text: msg.text, targetLanguage: userLanguage }),
+              });
+              const data = await res.json();
+              if (data.translatedText) {
+                msg.text = data.translatedText;
+                msg.translated = true;
+              }
+            } catch (err) {
+              console.error("Chat translation failed", err);
+            }
+          }
           setChatMessages((prev) => [...prev, msg]);
         });
 
@@ -217,11 +238,8 @@ export default function LiveSessionWidget({
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach((track) => track.stop());
       }
-      if (translatedStreamRef.current) {
-        translatedStreamRef.current.getTracks().forEach((track) => track.stop());
-      }
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-        mediaRecorderRef.current.stop();
+      if (audioProcessorRef.current) {
+        audioProcessorRef.current.disconnect();
       }
       if (audioContextRef.current && audioContextRef.current.state !== "closed") {
         audioContextRef.current.close();
@@ -247,18 +265,6 @@ export default function LiveSessionWidget({
     const newState = !isTranslationEnabled;
     setIsTranslationEnabled(newState);
     isTranslationEnabledRef.current = newState;
-    
-    if (!localStreamRef.current || !translatedStreamRef.current) return;
-    
-    const activeStream = newState ? translatedStreamRef.current : localStreamRef.current;
-    
-    Object.values(peersRef.current).forEach(peer => {
-       const oldTrack = peer.streams[0]?.getAudioTracks()[0];
-       const newTrack = activeStream.getAudioTracks()[0];
-       if (oldTrack && newTrack) {
-           peer.replaceTrack(oldTrack, newTrack, peer.streams[0]);
-       }
-    });
   };
 
   const handleSendMessage = (e: React.FormEvent) => {
@@ -269,6 +275,7 @@ export default function LiveSessionWidget({
       fileId: roomId,
       senderName: user?.email?.split("@")[0] || "User",
       text: newMsg.trim(),
+      senderLanguage: userLanguage,
     };
 
     socket.emit("send-chat-message", msgData);
@@ -395,7 +402,7 @@ export default function LiveSessionWidget({
               </div>
             )}
             {peers.map((peerObj) => (
-              <VideoPeer key={peerObj.peerID} peer={peerObj.peer} />
+              <VideoPeer key={peerObj.peerID} peer={peerObj.peer} isMuted={isTranslationEnabled} />
             ))}
           </div>
 
@@ -417,6 +424,7 @@ export default function LiveSessionWidget({
                     className={`px-3 py-1.5 rounded-xl text-xs max-w-[85%] ${msg.senderName === (user?.email?.split("@")[0] || "User") ? "bg-[#d4af37] text-black rounded-tr-sm" : "bg-white/10 text-white rounded-tl-sm"}`}
                   >
                     {msg.text}
+                    {msg.translated && <span className="text-[8px] opacity-60 ml-1">(Translated)</span>}
                   </div>
                 </div>
               ))

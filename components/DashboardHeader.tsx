@@ -65,6 +65,17 @@ export default function DashboardHeader({
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
+          <select
+            value={useDashboardStore((state) => state.userLanguage)}
+            onChange={(e) => useDashboardStore.getState().setUserLanguage(e.target.value)}
+            className="bg-[#1c1c24] text-white border border-white/10 px-2 py-1.5 rounded-md shadow-sm text-[11px] uppercase tracking-widest focus:outline-none focus:border-[#d4af37]/50 hover:bg-[#d4af37]/10 transition-colors"
+          >
+            <option value="en-US">🇺🇸 EN-US</option>
+            <option value="bn-BD">🇧🇩 BN-BD</option>
+            <option value="es-ES">🇪🇸 ES-ES</option>
+            <option value="fr-FR">🇫🇷 FR-FR</option>
+          </select>
+
           <button
             onClick={() => setIsAppearanceOpen(true)}
             className="text-[11px] uppercase tracking-widest border border-white/10 px-4 py-2 hover:bg-[#d4af37]/10 transition-colors text-white flex items-center gap-2 bg-[#1c1c24] rounded-md shadow-sm"

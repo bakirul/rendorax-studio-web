@@ -48,10 +48,9 @@ export async function POST(req: NextRequest) {
       "Your job is to assist clients and users with video reviews, timestamped comments, multiple video versions, private video hosting, and video production pipeline workflows. " +
       "Be professional, elegant, helpful, and concise. ";
 
-    // 🌐 ডাইনামিক ভাষা নির্ধারণ লজিক
-    if (selectedLanguage && languageMap[selectedLanguage]) {
-      const targetLang = languageMap[selectedLanguage];
-      systemInstruction += `Strictly respond in ${targetLang}. Understand the user's input context perfectly, but your reply MUST be entirely written in fluent ${targetLang}.`;
+    // 🌐 ডাইনামিক ভাষা নির্ধারণ লজিক (from global state)
+    if (selectedLanguage) {
+      systemInstruction += `\n\nCRITICAL INSTRUCTION: You MUST strictly respond in the following language locale: ${selectedLanguage}. Do not use any other language!`;
     } else {
       systemInstruction += "Automatically detect and reply in the same language the user used.";
     }
