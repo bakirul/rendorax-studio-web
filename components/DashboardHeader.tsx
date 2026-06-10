@@ -6,6 +6,29 @@ import { useRouter } from "next/navigation";
 import AppearanceSettings from "./dashboard/AppearanceSettings";
 import { useDashboardStore } from "@/store/useDashboardStore";
 
+const LANGUAGES = [
+  { code: "en-US", label: "🇺🇸 EN-US" },
+  { code: "bn-BD", label: "🇧🇩 BN-BD" },
+  { code: "es-ES", label: "🇪🇸 ES-ES" },
+  { code: "fr-FR", label: "🇫🇷 FR-FR" },
+  { code: "de-DE", label: "🇩🇪 DE-DE" },
+  { code: "zh-CN", label: "🇨🇳 ZH-CN" },
+  { code: "ja-JP", label: "🇯🇵 JA-JP" },
+  { code: "ru-RU", label: "🇷🇺 RU-RU" },
+  { code: "pt-BR", label: "🇧🇷 PT-BR" },
+  { code: "it-IT", label: "🇮🇹 IT-IT" },
+  { code: "ko-KR", label: "🇰🇷 KO-KR" },
+  { code: "ar-SA", label: "🇸🇦 AR-SA" },
+  { code: "hi-IN", label: "🇮🇳 HI-IN" },
+  { code: "tr-TR", label: "🇹🇷 TR-TR" },
+  { code: "nl-NL", label: "🇳🇱 NL-NL" },
+  { code: "pl-PL", label: "🇵🇱 PL-PL" },
+  { code: "vi-VN", label: "🇻🇳 VI-VN" },
+  { code: "th-TH", label: "🇹🇭 TH-TH" },
+  { code: "id-ID", label: "🇮🇩 ID-ID" },
+  { code: "sv-SE", label: "🇸🇪 SV-SE" },
+];
+
 export default function DashboardHeader({
   handleUpload,
   uploading,
@@ -21,6 +44,11 @@ export default function DashboardHeader({
   const supabase = createClient();
 
   const { isSidebarOpen, setIsSidebarOpen, isEditor, isScreenSharing } = useDashboardStore();
+  const [hasHydrated, setHasHydrated] = useState(false);
+
+  React.useEffect(() => {
+    setHasHydrated(true);
+  }, []);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -65,16 +93,19 @@ export default function DashboardHeader({
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
-          <select
-            value={useDashboardStore((state) => state.userLanguage)}
-            onChange={(e) => useDashboardStore.getState().setUserLanguage(e.target.value)}
-            className="bg-[#1c1c24] text-white border border-white/10 px-2 py-1.5 rounded-md shadow-sm text-[11px] uppercase tracking-widest focus:outline-none focus:border-[#d4af37]/50 hover:bg-[#d4af37]/10 transition-colors"
-          >
-            <option value="en-US">🇺🇸 EN-US</option>
-            <option value="bn-BD">🇧🇩 BN-BD</option>
-            <option value="es-ES">🇪🇸 ES-ES</option>
-            <option value="fr-FR">🇫🇷 FR-FR</option>
-          </select>
+          {hasHydrated && (
+            <select
+              value={useDashboardStore((state) => state.userLanguage)}
+              onChange={(e) => useDashboardStore.getState().setUserLanguage(e.target.value)}
+              className="text-gray-900 bg-white dark:bg-gray-800 dark:text-white border border-gray-300 dark:border-gray-600 px-2 py-1.5 rounded-md shadow-sm text-[11px] uppercase tracking-widest focus:outline-none focus:border-[#d4af37]/50 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              {LANGUAGES.map((lang) => (
+                <option key={lang.code} value={lang.code} className="text-gray-900 bg-white dark:bg-gray-800 dark:text-white">
+                  {lang.label}
+                </option>
+              ))}
+            </select>
+          )}
 
           <button
             onClick={() => setIsAppearanceOpen(true)}

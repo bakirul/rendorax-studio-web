@@ -12,6 +12,7 @@ interface Message {
 }
 
 export default function ChatbotWidget() {
+  const [hasHydrated, setHasHydrated] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
@@ -28,6 +29,10 @@ export default function ChatbotWidget() {
     { id: "1", sender: "ai", text: "Hello! I am your Kachna AI assistant. How can I help you with your video review today?", langUsed: "en" }
   ]);
   
+  React.useEffect(() => {
+    setHasHydrated(true);
+  }, []);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const quickEmojis = ["😀", "😂", "😍", "👍", "🔥", "🚀", "🎉", "❤️", "🙏", "✨"];
   
@@ -142,6 +147,8 @@ const handleSpeak = (text: string, langCode: string) => {
     if (isMinimized) return "fixed bottom-4 right-4 sm:bottom-6 sm:right-6 w-[calc(100vw-2rem)] sm:w-72 max-w-[288px] z-50 flex flex-col bg-zinc-950 border border-zinc-800 rounded-t-xl shadow-2xl transition-all duration-300";
     return "fixed bottom-4 right-4 sm:bottom-6 sm:right-6 w-[calc(100vw-2rem)] sm:w-[450px] max-w-[450px] h-[650px] max-h-[85vh] z-50 flex flex-col bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl transition-all duration-300";
   };
+
+  if (!hasHydrated) return null;
 
   return (
     <>

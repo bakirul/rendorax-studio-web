@@ -57,6 +57,7 @@ export default function LiveSessionWidget({
   roomId,
   user,
 }: LiveSessionProps) {
+  const [hasHydrated, setHasHydrated] = useState(false);
   const { isLiveMinimized, setIsLiveMinimized, userLanguage } = useDashboardStore();
   const [hasJoined, setHasJoined] = useState(false);
 
@@ -81,6 +82,10 @@ export default function LiveSessionWidget({
   const myVideo = useRef<HTMLVideoElement>(null);
   const peersRef = useRef<{ [socketId: string]: Peer.Instance }>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setHasHydrated(true);
+  }, []);
 
   useEffect(() => {
     if (hasJoined && !isLiveMinimized) {
@@ -292,6 +297,8 @@ export default function LiveSessionWidget({
       setIsLiveMinimized(true);
     }
   };
+
+  if (!hasHydrated) return null;
 
   return (
     <div className="flex flex-col items-start transition-all duration-300 w-full">
