@@ -63,7 +63,7 @@ export default function LiveSessionWidget({
   const [peers, setPeers] = useState<{ peerID: string; peer: Peer.Instance }[]>([]);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [chatMessages, setChatMessages] = useState<
-    { senderName: string; text: string; timestamp: string }[]
+    { senderName: string; text: string; timestamp: string; translated?: boolean }[]
   >([]);
   const [newMsg, setNewMsg] = useState("");
 
