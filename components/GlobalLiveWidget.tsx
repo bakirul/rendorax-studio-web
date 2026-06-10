@@ -49,6 +49,11 @@ export default function GlobalLiveWidget() {
       newSocket.emit("join-lobby", user.id);
     });
 
+    newSocket.on("connect_error", (err) => {
+      console.warn("⚠️ [GlobalLiveWidget] Socket connection failed. Ensure NEXT_PUBLIC_BACKEND_URL is set in production:", err.message);
+      // We don't throw here to avoid crashing the React tree
+    });
+
     return () => {
       newSocket.disconnect();
     };

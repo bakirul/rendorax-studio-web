@@ -47,6 +47,10 @@ export const useLiveComments = (
       newSocket.emit("join-video-room", roomToJoin);
     });
 
+    newSocket.on("connect_error", (err) => {
+      console.warn("⚠️ [useLiveComments] Socket connection failed. Ensure NEXT_PUBLIC_BACKEND_URL is set in production:", err.message);
+    });
+
     newSocket.on("disconnect", () => setIsLive(false));
 
     newSocket.on("comment-added", (incomingComment) => {

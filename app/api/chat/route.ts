@@ -18,16 +18,18 @@ const languageMap: Record<string, string> = {
 };
 
 export async function POST(req: NextRequest) {
-  try {
-    console.log("🟢 [API/CHAT] Incoming request received");
+  console.log("🟢 [API/CHAT] Incoming request received");
+  
+  // API Key চেক করা
+  if (!process.env.GEMINI_API_KEY) {
+    console.error("🔴 [API/CHAT] Gemini API key is not configured. process.env.GEMINI_API_KEY is undefined.");
     
-    if (!genAI) {
-      console.error("🔴 [API/CHAT] Gemini API key is not configured");
-      return NextResponse.json(
-        { error: "Gemini API key is not configured on the server." },
-        { status: 500 }
-      );
-    }
+    // সঠিক রেসপন্স সিনট্যাক্স
+    return NextResponse.json(
+      { error: "API Key missing in production environment" },
+      { status: 500 }
+    );
+  }
 
     const body = await req.json();
     console.log("🟢 [API/CHAT] Parsed request body:", body);
