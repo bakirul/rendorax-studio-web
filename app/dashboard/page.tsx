@@ -159,9 +159,13 @@ export default function DashboardPage() {
         }
       }, 100);
 
-      const roomId = `timeline-${previewFile?.name || currentFolder || "global-lobby"}`;
+      const globalRoomId = previewFile?.name || currentFolder || "global-lobby";
       if (socket) {
-        socket.emit("timeline-start-live-stream", { roomId });
+        // Emit explicit socket event to global room to force client UI switch
+        socket.emit("admin-started-timeline-share", { 
+          roomId: globalRoomId,
+          editorSocketId: socket.id 
+        });
       }
 
       stream.getVideoTracks()[0].onended = () => {
@@ -183,9 +187,9 @@ export default function DashboardPage() {
     setIsScreenSharing(false);
     setIsLiveStreaming(false);
 
-    const roomId = `timeline-${previewFile?.name || currentFolder || "global-lobby"}`;
+    const globalRoomId = previewFile?.name || currentFolder || "global-lobby";
     if (socket) {
-      socket.emit("timeline-stop-live-stream", { roomId });
+      socket.emit("admin-stopped-timeline-share", { roomId: globalRoomId });
     }
   };
 
@@ -193,18 +197,18 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!socket) return;
 
-    const handleEditorStart = (data: { roomId: string; editorSocketId: string }) => {
-      console.log("Editor started live stream:", data);
-      setIsLiveStreaming(true);
+    const handleAdminStartedShare = (data: { roomId: string; editorSocketId: string }) => {
+      console.log("Admin started timeline share, forcing UI switch to Cinema Mode");
+      setIsLiveStreaming(true); // Force UI switch BEFORE WebRTC negotiation
       socket.emit("timeline-client-ready", {
         targetSocketId: data.editorSocketId,
-        roomId: data.roomId,
+        roomId: `timeline-${data.roomId}`,
       });
     };
 
-    const handleEditorStop = () => {
-      console.log("Editor stopped live stream");
-      setIsLiveStreaming(false);
+    const handleAdminStoppedShare = () => {
+      console.log("Admin stopped timeline share, returning to file grid");
+      setIsLiveStreaming(false); // Force UI switch back to file grid
       if (clientScreenPeerRef.current) {
         clientScreenPeerRef.current.destroy();
         clientScreenPeerRef.current = null;
@@ -262,7 +266,7 @@ export default function DashboardPage() {
       });
 
       peer.on("stream", (remoteStream) => {
-        setIsLiveStreaming(true); // Force the UI to switch to the TimelineShareWidget
+        // UI is already mounted by admin-started-timeline-share, just attach stream safely
         const attachStream = () => {
           if (cinemaVideoRef.current) {
             cinemaVideoRef.current.srcObject = remoteStream;
@@ -278,7 +282,7 @@ export default function DashboardPage() {
         peer.destroy();
         if (clientScreenPeerRef.current === peer) {
           clientScreenPeerRef.current = null;
-          setIsLiveStreaming(false); // Return to default grid view when stream ends
+          // UI state is handled by admin-stopped-timeline-share, NOT here.
         }
       });
 
@@ -305,16 +309,16 @@ export default function DashboardPage() {
       }
     };
 
-    socket.on("timeline-start-live-stream", handleEditorStart);
-    socket.on("timeline-stop-live-stream", handleEditorStop);
+    socket.on("admin-started-timeline-share", handleAdminStartedShare);
+    socket.on("admin-stopped-timeline-share", handleAdminStoppedShare);
     socket.on("timeline-client-ready", handleClientReady);
     socket.on("timeline-webrtc-offer", handleScreenOffer);
     socket.on("timeline-webrtc-answer", handleScreenAnswer);
     socket.on("timeline-user-disconnected", handleUserDisconnected);
 
     return () => {
-      socket.off("timeline-start-live-stream", handleEditorStart);
-      socket.off("timeline-stop-live-stream", handleEditorStop);
+      socket.off("admin-started-timeline-share", handleAdminStartedShare);
+      socket.off("admin-stopped-timeline-share", handleAdminStoppedShare);
       socket.off("timeline-client-ready", handleClientReady);
       socket.off("timeline-webrtc-offer", handleScreenOffer);
       socket.off("timeline-webrtc-answer", handleScreenAnswer);
