@@ -20,6 +20,7 @@ import DashboardHeader from "@/components/DashboardHeader";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import FileGrid from "@/components/dashboard/FileGrid";
 import LUFSMeter from "@/components/LUFSMeter";
+import TimelineShareWidget from "@/components/TimelineShareWidget";
 
 const setMediaBitrate = (sdp: string, bitrate: number) => {
   let lines = sdp.split('\r\n');
@@ -146,7 +147,7 @@ export default function DashboardPage() {
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: { frameRate: 30 },
-        audio: true,
+        audio: false, // Set to false to avoid hardware stream locks with LiveSessionWidget's getUserMedia
       });
       screenStreamRef.current = stream;
       setIsScreenSharing(true);
@@ -158,9 +159,9 @@ export default function DashboardPage() {
         }
       }, 100);
 
-      const roomId = previewFile?.name || currentFolder || "global-lobby";
+      const roomId = `timeline-${previewFile?.name || currentFolder || "global-lobby"}`;
       if (socket) {
-        socket.emit("editor-start-live-stream", { roomId });
+        socket.emit("timeline-start-live-stream", { roomId });
       }
 
       stream.getVideoTracks()[0].onended = () => {
@@ -182,9 +183,9 @@ export default function DashboardPage() {
     setIsScreenSharing(false);
     setIsLiveStreaming(false);
 
-    const roomId = previewFile?.name || currentFolder || "global-lobby";
+    const roomId = `timeline-${previewFile?.name || currentFolder || "global-lobby"}`;
     if (socket) {
-      socket.emit("editor-stop-live-stream", { roomId });
+      socket.emit("timeline-stop-live-stream", { roomId });
     }
   };
 
@@ -195,7 +196,7 @@ export default function DashboardPage() {
     const handleEditorStart = (data: { roomId: string; editorSocketId: string }) => {
       console.log("Editor started live stream:", data);
       setIsLiveStreaming(true);
-      socket.emit("client-ready-for-stream", {
+      socket.emit("timeline-client-ready", {
         targetSocketId: data.editorSocketId,
         roomId: data.roomId,
       });
@@ -226,7 +227,7 @@ export default function DashboardPage() {
         if (signal.type === "offer" || signal.type === "answer") {
           signal.sdp = setMediaBitrate(signal.sdp, 2500);
         }
-        socket.emit("screen-webrtc-offer", {
+        socket.emit("timeline-webrtc-offer", {
           targetSocketId: data.clientSocketId,
           sdp: signal,
         });
@@ -254,7 +255,7 @@ export default function DashboardPage() {
         if (signal.type === "offer" || signal.type === "answer") {
           signal.sdp = setMediaBitrate(signal.sdp, 2500);
         }
-        socket.emit("screen-webrtc-answer", {
+        socket.emit("timeline-webrtc-answer", {
           targetSocketId: data.callerSocketId,
           sdp: signal,
         });
@@ -302,20 +303,20 @@ export default function DashboardPage() {
       }
     };
 
-    socket.on("editor-start-live-stream", handleEditorStart);
-    socket.on("editor-stop-live-stream", handleEditorStop);
-    socket.on("client-ready-for-stream", handleClientReady);
-    socket.on("screen-webrtc-offer", handleScreenOffer);
-    socket.on("screen-webrtc-answer", handleScreenAnswer);
-    socket.on("user-disconnected", handleUserDisconnected);
+    socket.on("timeline-start-live-stream", handleEditorStart);
+    socket.on("timeline-stop-live-stream", handleEditorStop);
+    socket.on("timeline-client-ready", handleClientReady);
+    socket.on("timeline-webrtc-offer", handleScreenOffer);
+    socket.on("timeline-webrtc-answer", handleScreenAnswer);
+    socket.on("timeline-user-disconnected", handleUserDisconnected);
 
     return () => {
-      socket.off("editor-start-live-stream", handleEditorStart);
-      socket.off("editor-stop-live-stream", handleEditorStop);
-      socket.off("client-ready-for-stream", handleClientReady);
-      socket.off("screen-webrtc-offer", handleScreenOffer);
-      socket.off("screen-webrtc-answer", handleScreenAnswer);
-      socket.off("user-disconnected", handleUserDisconnected);
+      socket.off("timeline-start-live-stream", handleEditorStart);
+      socket.off("timeline-stop-live-stream", handleEditorStop);
+      socket.off("timeline-client-ready", handleClientReady);
+      socket.off("timeline-webrtc-offer", handleScreenOffer);
+      socket.off("timeline-webrtc-answer", handleScreenAnswer);
+      socket.off("timeline-user-disconnected", handleUserDisconnected);
     };
   }, [socket]);
 
@@ -622,7 +623,7 @@ export default function DashboardPage() {
           <div className="fixed bottom-4 left-4 sm:bottom-6 sm:left-6 z-[60] flex flex-col items-start transition-all duration-300 pointer-events-none">
             <LiveSessionWidget
               socket={socket}
-              roomId={previewFile?.name || currentFolder || "global-lobby"}
+              roomId={`global-${previewFile?.name || currentFolder || "global-lobby"}`}
               user={user}
             />
           </div>
@@ -634,21 +635,7 @@ export default function DashboardPage() {
         className="flex flex-1 overflow-hidden relative min-h-0"
       >
         {isLiveStreaming ? (
-          <div className="flex-1 h-full w-full bg-black relative flex items-center justify-center animate-fade-in">
-            <video
-              ref={cinemaVideoRef}
-              autoPlay
-              playsInline
-              className="w-full h-full object-contain"
-            />
-            <div className="absolute top-4 left-4 bg-black/85 text-[#d4af37] text-[10px] px-3.5 py-2 rounded-lg border border-[#d4af37]/45 backdrop-blur-md z-10 flex items-center gap-2.5 font-bold tracking-widest uppercase shadow-2xl select-none">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-              </span>
-              <span>Cinema Mode: Live Editing Share</span>
-            </div>
-          </div>
+          <TimelineShareWidget cinemaVideoRef={cinemaVideoRef} />
         ) : (
           <>
             {isSidebarOpen && (
