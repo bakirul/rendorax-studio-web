@@ -1570,7 +1570,7 @@ export default function DashboardPage() {
                         <button
                           onClick={() => handleExportMarkers()}
                           className="text-[9px] uppercase font-bold tracking-widest bg-[#121217] border border-white/10 hover:border-[#d4af37] text-white px-2 py-1.5 rounded transition-colors shrink-0"
-                          title="Download timestamped markers as CSV and JSON"
+                          title="Download timestamped markers as CSV, JSON, and Premiere XML"
                         >
                           Export Markers
                         </button>

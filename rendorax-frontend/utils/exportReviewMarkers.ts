@@ -2,6 +2,7 @@ import { getCommentDisplayName, type VideoCommentRow } from "@/utils/commentAuth
 import { formatSMPTE } from "@/utils/timecode";
 
 const DEFAULT_FPS = 24;
+const MARKER_NAME_MAX_LENGTH = 80;
 
 export interface MarkerExportRow {
   timecode: string;
@@ -44,6 +45,91 @@ export function buildMarkerRows(
     }));
 }
 
+export function resolveExportFps(
+  previewFile?: { frameRate?: number | null } | null,
+): number {
+  const fps = previewFile?.frameRate;
+  if (typeof fps === "number" && fps > 0 && Number.isFinite(fps)) {
+    return fps;
+  }
+  return DEFAULT_FPS;
+}
+
+function secondsToFrame(seconds: number, fps: number): number {
+  return Math.floor(seconds * fps);
+}
+
+/** Escape text for XML element bodies (xmeml marker name/comment). */
+export function escapeXmlText(value: string): string {
+  return value
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+export function buildMarkersXmeml(
+  rows: MarkerExportRow[],
+  sequenceName: string,
+  fps = DEFAULT_FPS,
+): string {
+  const timebase = Math.round(fps);
+  const markerBlocks = rows.map((row) => {
+    const name =
+      row.comment.length > MARKER_NAME_MAX_LENGTH
+        ? row.comment.slice(0, MARKER_NAME_MAX_LENGTH)
+        : row.comment;
+    const comment = `${row.author}: ${row.comment}`;
+    const inFrame = secondsToFrame(row.seconds, fps);
+
+    return `    <marker>
+      <name>${escapeXmlText(name)}</name>
+      <comment>${escapeXmlText(comment)}</comment>
+      <in>${inFrame}</in>
+      <out>-1</out>
+    </marker>`;
+  });
+
+  const maxInFrame = rows.reduce(
+    (max, row) => Math.max(max, secondsToFrame(row.seconds, fps)),
+    0,
+  );
+  const duration = maxInFrame + timebase;
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE xmeml>
+<xmeml version="4">
+  <sequence id="rendorax-review-1">
+    <name>${escapeXmlText(sequenceName)}</name>
+    <duration>${duration}</duration>
+    <rate>
+      <timebase>${timebase}</timebase>
+      <ntsc>FALSE</ntsc>
+    </rate>
+    <timecode>
+      <rate>
+        <timebase>${timebase}</timebase>
+        <ntsc>FALSE</ntsc>
+      </rate>
+      <string>00:00:00:00</string>
+      <frame>0</frame>
+      <displayformat>NDF</displayformat>
+    </timecode>
+    <in>-1</in>
+    <out>-1</out>
+${markerBlocks.join("\n")}
+    <!-- Empty track shell: some Premiere versions reject marker-only sequences without media -->
+    <media>
+      <video>
+        <track />
+      </video>
+    </media>
+  </sequence>
+</xmeml>`;
+}
+
 export function buildMarkersCsv(rows: MarkerExportRow[]): string {
   const header = "Timecode,Seconds,Author,Comment,FileName,CreatedAt";
   const lines = rows.map((row) =>
@@ -71,7 +157,7 @@ function sanitizeAssetSegment(fileName: string): string {
 
 export function buildMarkersFilename(
   fileName: string,
-  ext: "csv" | "json",
+  ext: "csv" | "json" | "xml",
 ): string {
   const now = new Date();
   const pad = (n: number) => n.toString().padStart(2, "0");

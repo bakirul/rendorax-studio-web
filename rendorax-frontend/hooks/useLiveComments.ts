@@ -12,8 +12,11 @@ import {
   buildMarkerRows,
   buildMarkersCsv,
   buildMarkersJson,
+  buildMarkersXmeml,
   buildMarkersFilename,
+  cleanExportFileName,
   downloadTextFile,
+  resolveExportFps,
 } from "@/utils/exportReviewMarkers";
 
 function formatCommentTimecode(seconds: number): string {
@@ -306,13 +309,15 @@ export const useLiveComments = (
     }
   };
 
-  const handleExportMarkers = (format?: "csv" | "json") => {
+  const handleExportMarkers = (format?: "csv" | "json" | "xml") => {
     if (comments.length === 0) {
       alert("No comments to export.");
       return;
     }
     const fileName = previewFile?.name ?? comments[0]?.file_name ?? "unknown";
-    const rows = buildMarkerRows(comments, fileName);
+    const fps = resolveExportFps(previewFile);
+    const rows = buildMarkerRows(comments, fileName, fps);
+    const sequenceName = cleanExportFileName(fileName);
 
     const exportCsv = () => {
       downloadTextFile(
@@ -330,6 +335,14 @@ export const useLiveComments = (
       );
     };
 
+    const exportXml = () => {
+      downloadTextFile(
+        buildMarkersXmeml(rows, sequenceName, fps),
+        buildMarkersFilename(fileName, "xml"),
+        "application/xml;charset=utf-8",
+      );
+    };
+
     if (format === "csv") {
       exportCsv();
       return;
@@ -338,9 +351,14 @@ export const useLiveComments = (
       exportJson();
       return;
     }
+    if (format === "xml") {
+      exportXml();
+      return;
+    }
 
     exportCsv();
     window.setTimeout(exportJson, 150);
+    window.setTimeout(exportXml, 300);
   };
 
   const handleDownloadReport = () => {

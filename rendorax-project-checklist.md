@@ -2,7 +2,7 @@
 
 > **Generated for:** ChatGPT / AI assistant context upload  
 > **Workspace root:** `C:\Users\user\rendorax-studio`  
-> **Last updated:** July 3, 2026 (offline timeline marker export verified local; production verification pending)  
+> **Last updated:** July 4, 2026 (Premiere XML export verified local; production verification pending)  
 > **Do not paste secret values from this file into public channels — variable names only.**
 
 ### Source of truth (mandatory for all AI agents)
@@ -23,6 +23,7 @@
 - `compiled-notes-notify-trace.md` — compiledNotes notify inspection, implementation, local verification
 - `timeline-comment-markers-plan.md` — scrubber comment markers (Phase 1)
 - `offline-timeline-marker-export-plan.md` — NLE marker CSV/JSON export (Phase 1 verified local)
+- `premiere-xml-marker-export-plan.md` — Premiere Pro xmeml XML export (Phase 2a verified local)
 - `timeline-sharing-regression-report.md` — live screen share inspection
 
 ---
@@ -466,6 +467,7 @@ npm run dev
 | Compare workflow (Cloud CDN side-by-side) | **Resolved — manually verified (local, 2026-07-03)** | Fix 1 + 2 in `page.tsx` + `StreamingVideoPlayer.tsx`; V1/V2 side-by-side, cloud + vault compare, initial sync, no ghost playback; report: `compare-workflow-regression-report.md` |
 | Timeline comment markers (scrubber) | **Implemented — pending manual verify (local, 2026-07-03)** | `VideoTimelineScrubber` ticks from `video_comments.time_stamp`; click → `jumpToTime`; report: `timeline-comment-markers-plan.md` |
 | Offline timeline marker export (CSV + JSON) | **Resolved — manually verified (local, 2026-07-03)** | Vault toolbar **Export Markers**; `exportReviewMarkers.ts`; SMPTE @ 24fps; author via `getCommentDisplayName()`; report: `offline-timeline-marker-export-plan.md` |
+| Premiere Pro XML marker export (xmeml) | **Resolved — manually verified (local, 2026-07-03)** | `buildMarkersXmeml()`; File → Import in Premiere; sequence markers; report: `premiere-xml-marker-export-plan.md` |
 
 ---
 
@@ -487,7 +489,7 @@ Items below are **not confirmed** by direct inspection in this workspace. Do not
 | **Review notify / compiledNotes (production)** | Compile & Send + Notify Team verified **local dev only** (2026-07-03); production Resend/Discord + full notes delivery not re-tested |
 | **Comment author + avatar (production)** | Resolved **local dev only** (2026-07-03); production Supabase P1 SQL not re-tested |
 | **Compare workflow (production)** | Resolved **local dev only** (2026-07-03); production not tested |
-| **Offline timeline marker export (production)** | CSV + JSON export verified **local dev only** (2026-07-03); production not tested |
+| **Offline timeline marker export (production)** | CSV + JSON + XML export verified **local dev only** (2026-07-03); production not tested |
 | **Supabase Storage bucket `client-vault`** | Referenced in admin/dashboard code; not confirmed in new project |
 | **Redis/BullMQ transcode worker (production)** | Optional; requires `REDIS_URL` — not verified live |
 | **Admin `app_metadata.role` for users** | Users may lack `role` after migration — affects `/admin` access |
@@ -512,6 +514,7 @@ Only items confirmed by **local dev** manual verification on 2026-07-03. **Produ
 | Review notify — Compile & Send (`compiledNotes`) | Resolved |
 | Timeline comment markers (scrubber) | Implemented — pending manual verify |
 | Offline timeline marker export (CSV + JSON) | Resolved |
+| Premiere Pro XML marker export (xmeml) | Resolved |
 | Production deploy / live env | **Pending §14** |
 
 ### Schema & API (code present)
@@ -539,7 +542,8 @@ Only items confirmed by **local dev** manual verification on 2026-07-03. **Produ
 - [x] **Review Session Complete / compiledNotes notify** — `compiledNotes` in `/api/notify`; email **Feedback Notes** + Discord **📝 Compiled Notes** on **Compile & Send**; Notify Team summary-only; HTML escape. Report: `compiled-notes-notify-trace.md`. **Resolved — manually verified (local, 2026-07-03).**
 - [x] **Review Session Complete / feedback notify (summary)** — `handleNotifyTeam` → `POST /api/notify` (Discord embed + Resend email with file name + comment count). **Resolved — manually verified (local, 2026-07-03).**
 - [ ] **Timeline comment markers (scrubber)** — gold ticks on `VideoTimelineScrubber` from `comments.time_stamp`; tooltip + `jumpToTime` on click. Report: `timeline-comment-markers-plan.md`. **Implemented — pending manual verify (local, 2026-07-03).**
-- [x] **Offline timeline marker export (CSV + JSON)** — vault toolbar **Export Markers**; `exportReviewMarkers.ts` + `handleExportMarkers()`; SMPTE @ 24fps; author, comment, file name, `createdAt`; empty-comment guard; one click → CSV + JSON. Report: `offline-timeline-marker-export-plan.md`. **Resolved — manually verified (local, 2026-07-03).**
+- [x] **Offline timeline marker export (CSV + JSON)** — vault toolbar **Export Markers**; `exportReviewMarkers.ts` + `handleExportMarkers()`; SMPTE @ 24fps; author, comment, file name, `createdAt`; empty-comment guard; one click → CSV + JSON + XML. Report: `offline-timeline-marker-export-plan.md`. **Resolved — manually verified (local, 2026-07-03).**
+- [x] **Premiere Pro XML marker export (Phase 2a)** — xmeml sequence markers; Premiere File → Import; correct timecodes; author in marker comment; CSV/JSON preserved. Report: `premiere-xml-marker-export-plan.md`. **Resolved — manually verified (local, 2026-07-03).**
 - [x] **Compare workflow (Cloud CDN)** — V1 (Reference) + V2 (Current) side-by-side; compare dropdown; cloud/R2 + vault compare; initial sync; no ghost/background playback; single player when compare off. Reports: `compare-workflow-regression-report.md`. **Resolved — manually verified (local, 2026-07-03).**
 
 > **Local vs production:** Dashboard QA items above (upload, comments, compare, reviewer identity, review notify + compiledNotes, offline marker export, R2 playback) are **local dev only** unless noted. Production — see §14.
@@ -583,7 +587,8 @@ Each item appears **once**. Production-specific checks are in §14 unless listed
 
 ### Low priority / polish
 
-- [x] **Offline Editing Timeline Marker Export (Phase 1)** — CSV + JSON via vault **Export Markers**; `offline-timeline-marker-export-plan.md`. **Resolved — manually verified (local, 2026-07-03).** Phase 2 (Premiere/Resolve presets, FPS from asset) remains open.
+- [x] **Offline Editing Timeline Marker Export (Phase 1)** — CSV + JSON via vault **Export Markers**; `offline-timeline-marker-export-plan.md`. **Resolved — manually verified (local, 2026-07-03).**
+- [x] **Premiere Pro XML Marker Export (Phase 2a)** — xmeml sequence markers for Premiere import; `premiere-xml-marker-export-plan.md`. **Resolved — manually verified (local, 2026-07-03).**
 - [ ] **AI Quality Check & Improvement Suggestions** — spec + phased rollout; see `review-collaboration-layer-map.md` §8 (not started)
 - [ ] Fix missing `/assets/logo.png` (404 in dev logs)
 - [ ] Remove deprecated `app/api/upload-chunk` route or redirect
@@ -659,6 +664,9 @@ When assisting with this project, keep these constraints in mind:
 
 | Date | Decision | Rationale |
 |------|----------|-----------|
+| 2026-07-03 | Premiere XML marker export manually verified local | xmeml import in Premiere; sequence markers; author + comment; CSV/JSON preserved; production §14 |
+| 2026-07-04 | Premiere XML marker export Phase 2a implemented | `buildMarkersXmeml()`; Export Markers adds .xml; superseded by manual verify |
+| 2026-07-03 | Premiere Pro XML marker export — inspection plan (xmeml Phase 2) | `premiere-xml-marker-export-plan.md`; superseded by Phase 2a implementation |
 | 2026-07-03 | Offline timeline marker export manually verified local | CSV + JSON; Export Markers toolbar; SMPTE, author, empty guard; production §14; report: `offline-timeline-marker-export-plan.md` |
 | 2026-07-03 | Offline timeline marker export Phase 1 (CSV + JSON) | `exportReviewMarkers.ts`, vault toolbar Export Markers; superseded by manual verify same day |
 | 2026-07-03 | Offline timeline marker export — inspection plan (CSV/JSON Phase 1) | `offline-timeline-marker-export-plan.md`; not implemented |

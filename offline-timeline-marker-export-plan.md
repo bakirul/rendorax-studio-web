@@ -294,11 +294,12 @@ Rendorax_Markers_{sanitizedBaseName}_{YYYYMMDD-HHmmss}.json
 
 ### Phase 2 (after Phase 1 verified)
 
+- **Premiere Pro xmeml XML** — sequence-level markers; `premiere-xml-marker-export-plan.md`. **Resolved — manually verified (local, 2026-07-03).**
 - FPS from `MediaAsset.frameRate` when cloud asset selected
-- Premiere + Resolve preset CSV columns (lab-tested)
+- Resolve preset CSV columns (lab-tested)
 - Optional `status` / `assignee` DB columns
 - Export from `/admin` preview
-- Zip bundle: `markers.csv` + `markers.json` + `report.txt`
+- Zip bundle: `markers.csv` + `markers.json` + `markers.xml` + `report.txt`
 
 ---
 
@@ -309,6 +310,7 @@ Rendorax_Markers_{sanitizedBaseName}_{YYYYMMDD-HHmmss}.json
 | Comment data | Available (P0 + P1 author) | Pending §14 |
 | Scrubber markers | Implemented — pending manual verify | Pending |
 | CSV/JSON export | **Resolved — manually verified (2026-07-03)** | Pending §14 |
+| Premiere xmeml XML | **Resolved — manually verified (2026-07-03)** | Pending §14 |
 
 ---
 
@@ -318,7 +320,7 @@ Rendorax_Markers_{sanitizedBaseName}_{YYYYMMDD-HHmmss}.json
 - `compiled-notes-notify-trace.md` — compile format reference
 - `comment-review-workflow-map.md` — comment workflow
 - `review-collaboration-layer-map.md` — collaboration roadmap
-- `utils/timecode.ts` — SMPTE helpers
+- `premiere-xml-marker-export-plan.md` — Premiere Pro xmeml XML (Phase 2)
 
 ---
 
@@ -335,7 +337,7 @@ Rendorax_Markers_{sanitizedBaseName}_{YYYYMMDD-HHmmss}.json
 | UI | Vault video toolbar — **Export Markers** between **Report** and **Send** (`isVideo && !isCdn`) |
 | FPS | 24 (matches dashboard `useFrameAccurateVideo`) |
 | Author | `getCommentDisplayName()` — no duplicated logic |
-| Download | One click → CSV then JSON (150ms stagger) |
+| Download | One click → CSV (+150ms) → JSON (+300ms) → Premiere XML |
 
 ---
 
