@@ -1,8 +1,13 @@
 import React from "react";
+import CommentAuthorBadge from "@/components/CommentAuthorBadge";
 import CommentSceneThumbnail from "@/components/CommentSceneThumbnail";
+import {
+  getCommentDisplayName,
+  type VideoCommentRow,
+} from "@/utils/commentAuthor";
 
 interface CommentsPanelProps {
-  comments: any[];
+  comments: VideoCommentRow[];
   newComment: string;
   setNewComment: (val: string) => void;
   handleAddComment: (e: React.FormEvent) => void;
@@ -71,14 +76,23 @@ export default function CommentsPanel({
                   />
                 )}
                 <div className="min-w-0 text-sm">
-                <button
-                  onClick={() => jumpToTime(comment.time_stamp)}
-                  className="text-[#d4af37] font-mono mr-2 hover:underline focus:outline-none"
-                >
-                  {Math.floor(comment.time_stamp / 60)}:
-                  {("0" + Math.floor(comment.time_stamp % 60)).slice(-2)}
-                </button>
-                <span className="text-zinc-200">{comment.comment_text}</span>
+                  <div className="mb-1 flex min-w-0 items-center gap-1.5">
+                    <CommentAuthorBadge
+                      displayName={getCommentDisplayName(comment)}
+                      avatarUrl={comment.author_avatar_url}
+                    />
+                    <span className="truncate text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+                      {getCommentDisplayName(comment)}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => jumpToTime(comment.time_stamp)}
+                    className="text-[#d4af37] font-mono mr-2 hover:underline focus:outline-none"
+                  >
+                    {Math.floor(comment.time_stamp / 60)}:
+                    {("0" + Math.floor(comment.time_stamp % 60)).slice(-2)}
+                  </button>
+                  <span className="text-zinc-200">{comment.comment_text}</span>
                 </div>
               </div>
               <div className="flex items-center space-x-1 md:opacity-0 group-hover:opacity-100 transition-opacity duration-150">

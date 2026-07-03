@@ -1,8 +1,8 @@
 # Compare Workflow Regression Report
 
 **Inspection date:** 2026-07-03  
-**Status:** **Second fix implemented — pending manual verify (local, 2026-07-03)** — **not production-verified**  
-**Verification scope:** Local dev only until manual QA passes. First manual pass failed; second fix (layout + sync + teardown) awaiting retest.  
+**Status:** **Resolved — manually verified (local, 2026-07-03)** — production not verified  
+**Verification scope:** Local dev verified 2026-07-03 after second fix (layout + sync + playback teardown).  
 **Problem:** Dashboard previously showed **V1 (Reference)** vs **V2 (Current)** side-by-side; only a single player appeared while compare controls existed on Cloud/CDN preview.
 
 **Related:** `r2-playback-review-map.md` §Compare mode, `dashboard-qa-issue-map.md` QA-009
@@ -370,7 +370,8 @@ When `previewFile.isCdn === true`, both the **V2 label** and **entire V1 column*
 | Inspection | ✅ Complete |
 | Root cause | `!previewFile.isCdn` blocked compare render; CDN toolbar lacked compare dropdown; dropdown was vault-URL only |
 | Implementation | ✅ **Done** — `app/dashboard/page.tsx` (2026-07-03) |
-| Manual verification | ⏳ **Pending** — first pass failed; second fix implemented, not yet tested |
+| Manual verification | ✅ **Resolved — manually verified (local, 2026-07-03)** |
+| Production verification | ⏳ Pending |
 
 ### Implementation summary
 
@@ -720,7 +721,35 @@ Secondary: **incomplete HLS teardown** on remount may contribute to ghost playba
 | Second trace + background playback trace | ✅ Complete |
 | Second fix implemented | ✅ `page.tsx` + `StreamingVideoPlayer.tsx` (2026-07-03) |
 | Build (second fix) | ✅ Passed |
-| Manual verification | ⏳ **Pending** — first pass failed; second fix not yet tested |
+| Manual verification | ✅ **Resolved — manually verified (local, 2026-07-03)** |
+| Production verification | ⏳ Pending |
+
+---
+
+## Manual Verification Passed — Final (2026-07-03)
+
+**Environment:** Local dev  
+**Status:** Resolved — manually verified (local). Production not verified.
+
+### Verified
+
+| Check | Result |
+|-------|--------|
+| V1 (Reference) + V2 (Current) side-by-side | ✅ |
+| Compare dropdown (cloud + vault) | ✅ |
+| Cloud/R2 compare | ✅ |
+| Vault compare | ✅ |
+| Initial time/play sync on compare mount | ✅ |
+| No ghost / background playback on swap | ✅ |
+| Compare off → single player | ✅ |
+
+### Verification checklist (for manual QA)
+
+1. Cloud bin → preview V2 → Compare → V1 → two players side by side on desktop.
+2. Main playing → select compare → reference seeks to same time and plays (muted).
+3. Switch compare target → no ghost audio from previous reference.
+4. Clear compare → single player; reference stopped.
+5. Mobile → stacked layout still works.
 
 ---
 
@@ -748,11 +777,3 @@ Secondary: **incomplete HLS teardown** on remount may contribute to ghost playba
 | Compare muted | Yes | Unchanged |
 | Compare off | Single player | Unchanged |
 | Play/pause/seek sync | Main → compare events | Preserved + initial sync on mount |
-
-### Verification checklist (for manual QA)
-
-1. Cloud bin → preview V2 → Compare → V1 → two players side by side on desktop.
-2. Main playing → select compare → reference seeks to same time and plays (muted).
-3. Switch compare target → no ghost audio from previous reference.
-4. Clear compare → single player; reference stopped.
-5. Mobile → stacked layout still works.

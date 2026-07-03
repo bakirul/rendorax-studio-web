@@ -2,7 +2,7 @@
 
 > **Generated for:** ChatGPT / AI assistant context upload  
 > **Workspace root:** `C:\Users\user\rendorax-studio`  
-> **Last updated:** July 3, 2026 (end-of-day — local QA session; production verification pending)  
+> **Last updated:** July 3, 2026 (PR prep — compare + reviewer identity; production verification pending)  
 > **Do not paste secret values from this file into public channels — variable names only.**
 
 ### Source of truth (mandatory for all AI agents)
@@ -457,8 +457,9 @@ npm run dev
 | QA-001: POST /api/media/assets hangs on Redis enqueue (FINALIZING) | **Resolved — manually verified (local)** | Async enqueue + fail-fast producer Redis; verified 2026-07-03 |
 | R2 playback processing gap (empty URL during transcode) | **Resolved — manually verified (local)** | `utils/mediaAssets.ts`: mezzanine CDN fallback when processing active; verified 2026-07-03 — MP4 during processing, HLS after `ready`; report: `r2-processing-gap-trace.md` |
 | Comment creation failure (PGRST205 / missing `video_comments`) | **Resolved — manually verified (local)** | P0 SQL `supabase-p0-legacy-review-tables.sql`; verified 2026-07-03 — create, persist, timestamps, thumbnails; reports: `comment-create-failure-trace.md`, `comment-review-workflow-map.md` |
+| Comment author + avatar (Option A) | **Implemented — pending manual verify (local)** | P1 SQL `supabase-p1-comment-author-columns.sql`; `author_display_name`, `author_avatar_url`, `resolveCommentAuthor()`, `CommentAuthorBadge`, `CommentsPanel` author row, initials fallback, multi-reviewer; report: `comment-author-avatar-plan.md` |
 | Review Session Complete / feedback notify (`POST /api/notify`) | **Working — manually verified (local)** | Notify Team + Compile & Send deliver Discord + email summary (file name + comment count); verified 2026-07-03; `compiledNotes` body still not in API schema — see `comment-review-workflow-map.md` |
-| Compare workflow (Cloud CDN side-by-side) | **Second fix implemented — pending manual verify (local)** | `page.tsx` + `StreamingVideoPlayer.tsx`: CDN gate/URLs (fix 1) + V1 `flex-1`, initial sync, playback teardown (fix 2); report: `compare-workflow-regression-report.md` |
+| Compare workflow (Cloud CDN side-by-side) | **Resolved — manually verified (local, 2026-07-03)** | Fix 1 + 2 in `page.tsx` + `StreamingVideoPlayer.tsx`; V1/V2 side-by-side, cloud + vault compare, initial sync, no ghost playback; report: `compare-workflow-regression-report.md` |
 
 ---
 
@@ -478,7 +479,8 @@ Items below are **not confirmed** by direct inspection in this workspace. Do not
 | **Legacy Supabase P1 tables in new project** | `project_status`, `project_status_details`, `client_invoices` — not yet created; see `legacy-supabase-tables-migration-plan.md` |
 | **Legacy Supabase P0 tables (production)** | `video_comments`, `video_metadata` verified **local dev only** (2026-07-03); production Supabase not re-tested |
 | **Review notify / feedback summary (production)** | Notify flow verified **local dev only** (2026-07-03); production Resend/Discord env not re-tested |
-| **Compare workflow (production)** | Not tested on production; second fix pending local manual verify |
+| **Comment author + avatar (production)** | Feature verified **local dev only**; P1 SQL + production Supabase not re-tested |
+| **Compare workflow (production)** | Resolved **local dev only** (2026-07-03); production not tested |
 | **Supabase Storage bucket `client-vault`** | Referenced in admin/dashboard code; not confirmed in new project |
 | **Redis/BullMQ transcode worker (production)** | Optional; requires `REDIS_URL` — not verified live |
 | **Admin `app_metadata.role` for users** | Users may lack `role` after migration — affects `/admin` access |
@@ -510,10 +512,11 @@ Only items confirmed by **local dev** manual verification on 2026-07-03. **Produ
 - [x] **QA-001** — FINALIZING hang fix: `POST /api/media/assets` returns `201` immediately after `MediaAsset` create; BullMQ enqueue is fire-and-forget with fail-fast producer Redis + 5s enqueue timeout (`media.routes.ts`, `mediaQueue.ts`, `mediaProcessing.ts`). Report: `qa-001-finalizing-hang-trace.md`. **Resolved — manually verified (local, 2026-07-03).**
 - [x] **R2 processing gap** — Playback during transcode: `getMediaPlaybackUrl()` returns mezzanine CDN MP4 while `processingStatus` is active (`queued`/`probing`/`transcoding`/`uploading`); HLS still preferred when `ready` (`utils/mediaAssets.ts`). Report: `r2-processing-gap-trace.md`. **Resolved — manually verified (local, 2026-07-03):** original MP4 plays during processing; HLS takeover after `ready`.
 - [x] **Comment creation (P0 legacy tables)** — `video_comments` + `video_metadata` created via `supabase-p0-legacy-review-tables.sql`; PGRST205 resolved. **Resolved — manually verified (local, 2026-07-03):** comment create, persistence, timestamp jump, scene thumbnails. Reports: `comment-create-failure-trace.md`, `comment-review-workflow-map.md`.
+- [ ] **Comment author + avatar (Option A)** — `author_display_name` / `author_avatar_url` on insert via `resolveCommentAuthor()`; `CommentAuthorBadge` + name in `CommentsPanel`; initials fallback; multi-reviewer identity. SQL: `supabase-p1-comment-author-columns.sql`. Report: `comment-author-avatar-plan.md`. **Implemented — pending manual verify (local).**
 - [x] **Review Session Complete / feedback notify** — `handleNotifyTeam` + `handleCompileAndSend` → `POST /api/notify` (Discord embed + Resend email with file name + comment count). **Working — manually verified (local, 2026-07-03).** Known limitation: API `reviewSchema` does not include `compiledNotes` — full compiled text not in email body yet (`comment-review-workflow-map.md` §6).
-- [ ] **Compare workflow (Cloud CDN)** — Fix 1: removed `!previewFile.isCdn` gate; cloud compare URLs + CDN toolbar dropdown. Fix 2 (2026-07-03): V1 `flex-1` side-by-side layout, initial compare sync, `StreamingVideoPlayer` teardown, compare swap cleanup. Report: `compare-workflow-regression-report.md`. **Second fix implemented — pending manual verify (local).** First manual pass failed; not marked verified.
+- [x] **Compare workflow (Cloud CDN)** — V1 (Reference) + V2 (Current) side-by-side; compare dropdown; cloud/R2 + vault compare; initial sync; no ghost/background playback; single player when compare off. Reports: `compare-workflow-regression-report.md`. **Resolved — manually verified (local, 2026-07-03).**
 
-> **Local vs production:** Upload, comment, review-notify, and R2 playback QA above are **local dev only**. Compare is **not yet verified** even locally. Production — see §14.
+> **Local vs production:** Dashboard QA items above (upload, comments, compare, reviewer identity, review notify, R2 playback) are **local dev only** unless noted. Production — see §14.
 
 ### Documentation
 
@@ -539,7 +542,7 @@ Each item appears **once**. Production-specific checks are in §14 unless listed
 - [ ] Wire agency management UI into dashboard/admin (API exists; UI does not)
 - [ ] Seed `User` records in Prisma for existing Supabase auth users
 - [x] Verify legacy Supabase **P0** tables in new project (`video_comments`, `video_metadata`) — **local dev, 2026-07-03** via `supabase-p0-legacy-review-tables.sql`
-- [ ] **Compare workflow** — manual verify fix 2: side-by-side V1/V2, initial sync, no ghost playback (`compare-workflow-regression-report.md`)
+- [ ] Apply **P1** `supabase-p1-comment-author-columns.sql` on production Supabase (local applied / verified per team)
 - [ ] Verify legacy Supabase **P1** tables (`project_status`, `project_status_details`, `client_invoices`) — see `legacy-supabase-tables-migration-plan.md`
 - [ ] Configure Supabase Storage bucket `client-vault` in new project
 
@@ -628,7 +631,8 @@ When assisting with this project, keep these constraints in mind:
 
 | Date | Decision | Rationale |
 |------|----------|-----------|
-| 2026-07-03 | Dashboard QA session: QA-001/002, R2 playback gap, P0 comments, review notify verified **local**; compare fix 2 implemented, **not** verified | Document before GitHub push; production remains §14 |
+| 2026-07-03 | Compare workflow + comment author/avatar: local QA complete; PR branch `monorepo-stabilization-2026-07-03` | Production remains §14 |
+| 2026-07-03 | Dashboard QA session: QA-001/002, R2 playback gap, P0 comments, review notify verified **local** | Document before GitHub push; production remains §14 |
 | 2026-07-03 | Documentation audit: separate local vs production status; add §14 Needs Verification | Avoid marking unverified production assumptions as complete |
 | 2026-07-03 | Keep `AgencyProject` separate from portfolio `Project` in Prisma | Avoid breaking existing `GET /api/projects` and portfolio data model |
 | 2026-06 | Consolidate `DATABASE_URL` / `DIRECT_URL` only in `rendorax-backend/.env.local` | Prisma injects both `.env` files; duplicate passwords caused P1000 auth failures |

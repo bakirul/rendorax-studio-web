@@ -3,6 +3,10 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { io, Socket } from "socket.io-client";
 import { confirmDelete } from "@/utils/confirmDelete";
+import {
+  resolveCommentAuthor,
+  type VideoCommentRow,
+} from "@/utils/commentAuthor";
 
 export const useLiveComments = (
   user: any,
@@ -14,7 +18,7 @@ export const useLiveComments = (
   const videoRefStable = useRef(videoRef);
   videoRefStable.current = videoRef;
 
-  const [comments, setComments] = useState<any[]>([]);
+  const [comments, setComments] = useState<VideoCommentRow[]>([]);
   const [newComment, setNewComment] = useState("");
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isLive, setIsLive] = useState(false);
@@ -64,7 +68,7 @@ export const useLiveComments = (
         err.message,
       );
     };
-    const handleCommentAdded = (incomingComment: { id: string; time_stamp: number }) => {
+    const handleCommentAdded = (incomingComment: VideoCommentRow) => {
       setComments((prev) => {
         if (prev.some((c) => c.id === incomingComment.id)) return prev;
         return [...prev, incomingComment].sort(
@@ -162,6 +166,8 @@ export const useLiveComments = (
     const currentTime = videoRef.current.currentTime;
     videoRef.current.pause();
 
+    const author = resolveCommentAuthor(user);
+
     const { data, error } = await supabase
       .from("video_comments")
       .insert([
@@ -170,6 +176,8 @@ export const useLiveComments = (
           user_id: user.id,
           time_stamp: currentTime,
           comment_text: commentTextToSend,
+          author_display_name: author.author_display_name,
+          author_avatar_url: author.author_avatar_url,
         },
       ])
       .select();
