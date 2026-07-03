@@ -15,7 +15,11 @@ const uploadSchema = z.object({
 const reviewSchema = z.object({
   fileName: z.string().min(1, "File name is required"),
   totalComments: z.number(),
+  compiledNotes: z.string().max(100_000).optional(),
 });
+
+/** Discord embed field value limit is 1024; leave room for truncation notice. */
+const DISCORD_NOTES_FIELD_LIMIT = 1000;
 
 // HTML Injection / XSS Protection Utility
 function escapeHtml(text: string | number | undefined | null): string {
@@ -26,6 +30,28 @@ function escapeHtml(text: string | number | undefined | null): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+function truncateForDiscord(text: string, maxLen = DISCORD_NOTES_FIELD_LIMIT): string {
+  if (text.length <= maxLen) return text;
+  return `${text.slice(0, maxLen - 48)}\n…(truncated — open Rendorax HQ for full list)`;
+}
+
+function buildCompiledNotesEmailSection(compiledNotes: string | undefined): string {
+  if (!compiledNotes?.trim()) return "";
+  const safeNotes = escapeHtml(compiledNotes);
+  return `
+                  <h3 style="color: #d4af37; margin: 24px 0 12px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em;">Feedback Notes</h3>
+                  <pre style="font-family: Consolas, Monaco, monospace; font-size: 12px; line-height: 1.5; background-color: #0a0a0f; border: 1px solid #333; border-radius: 6px; padding: 16px; white-space: pre-wrap; word-wrap: break-word; color: #e5e5e5; margin: 0 0 20px;">${safeNotes}</pre>`;
+}
+
+function buildDiscordNotesField(compiledNotes: string | undefined) {
+  if (!compiledNotes?.trim()) return null;
+  return {
+    name: "📝 Compiled Notes",
+    value: truncateForDiscord(compiledNotes),
+    inline: false,
+  };
 }
 
 export async function POST(request: Request) {
@@ -72,8 +98,14 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Invalid review data format" }, { status: 400 });
       }
 
-      const { fileName, totalComments } = parsedBody.data;
+      const { fileName, totalComments, compiledNotes } = parsedBody.data;
       const safeFileName = escapeHtml(fileName);
+      const discordNotesField = buildDiscordNotesField(compiledNotes);
+      const discordFields = [
+        { name: "📊 Total Notes/Comments", value: `\`${totalComments} Comments\``, inline: true },
+        { name: "👤 Reviewed By", value: safeUserEmail, inline: true },
+        ...(discordNotesField ? [discordNotesField] : []),
+      ];
 
       // ১. ডিসকোর্ড সামারি অ্যালার্ট
       const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
@@ -87,12 +119,11 @@ export async function POST(request: Request) {
               embeds: [
                 {
                   title: `🎬 Project: ${safeFileName}`,
-                  description: `The client has finished reviewing this asset and submitted all feedback notes.`,
+                  description: discordNotesField
+                    ? `The client has finished reviewing this asset and submitted feedback notes (see compiled notes below).`
+                    : `The client has finished reviewing this asset and submitted all feedback notes.`,
                   color: 13936439, // Rendorax Gold
-                  fields: [
-                    { name: "📊 Total Notes/Comments", value: `\`${totalComments} Comments\``, inline: true },
-                    { name: "👤 Reviewed By", value: safeUserEmail, inline: true },
-                  ],
+                  fields: discordFields,
                   timestamp: new Date().toISOString(),
                 },
               ],
@@ -116,7 +147,7 @@ export async function POST(request: Request) {
                   <p style="font-size: 14px; margin: 8px 0;"><strong>Asset File:</strong> ${safeFileName}</p>
                   <p style="font-size: 14px; margin: 8px 0;"><strong>Total Feedback Left:</strong> <span style="color: #d4af37; font-weight: bold;">${totalComments} comments</span></p>
                   <p style="font-size: 14px; margin: 8px 0;"><strong>Client Email:</strong> ${safeUserEmail}</p>
-                  <br/>
+                  ${buildCompiledNotesEmailSection(compiledNotes)}
                   <a href="https://www.rendorax.com/admin" style="background-color:#d4af37;color:black;padding:12px 24px;text-decoration:none;font-weight:bold;text-transform:uppercase;display:inline-block;border-radius:4px;">Open Rendorax HQ to View Notes</a>
               </div>
             `,

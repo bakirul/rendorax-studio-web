@@ -4,9 +4,19 @@ import { createClient } from "@/utils/supabase/client";
 import { io, Socket } from "socket.io-client";
 import { confirmDelete } from "@/utils/confirmDelete";
 import {
+  getCommentDisplayName,
   resolveCommentAuthor,
   type VideoCommentRow,
 } from "@/utils/commentAuthor";
+
+function formatCommentTimecode(seconds: number): string {
+  return `${Math.floor(seconds / 60)}:${("0" + Math.floor(seconds % 60)).slice(-2)}`;
+}
+
+function formatCompiledNoteLine(comment: VideoCommentRow): string {
+  const author = getCommentDisplayName(comment);
+  return `[${formatCommentTimecode(comment.time_stamp)}] ${author}: ${comment.comment_text}`;
+}
 
 export const useLiveComments = (
   user: any,
@@ -266,12 +276,7 @@ export const useLiveComments = (
       const cleanFileName = previewFile.name.substring(
         previewFile.name.indexOf("_") + 1,
       );
-      const compiledNotes = comments
-        .map(
-          (c) =>
-            `[${Math.floor(c.time_stamp / 60)}:${("0" + Math.floor(c.time_stamp % 60)).slice(-2)}] ${c.comment_text}`,
-        )
-        .join("\n");
+      const compiledNotes = comments.map(formatCompiledNoteLine).join("\n");
       const res = await fetch("/api/notify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

@@ -2,7 +2,7 @@
 
 > **Generated for:** ChatGPT / AI assistant context upload  
 > **Workspace root:** `C:\Users\user\rendorax-studio`  
-> **Last updated:** July 3, 2026 (reviewer identity verified local; production verification pending)  
+> **Last updated:** July 3, 2026 (compiledNotes notify verified local; production verification pending)  
 > **Do not paste secret values from this file into public channels — variable names only.**
 
 ### Source of truth (mandatory for all AI agents)
@@ -20,6 +20,8 @@
 **Related reports (reference only):**
 - `supabase-auth-live-test-report.md` — post-migration auth config inspection
 - `production-auth-flow-walkthrough.md` — full login/session/logout flow map
+- `compiled-notes-notify-trace.md` — compiledNotes notify inspection, implementation, local verification
+- `review-collaboration-layer-map.md` — collaboration layer inspection map
 
 ---
 
@@ -458,7 +460,7 @@ npm run dev
 | R2 playback processing gap (empty URL during transcode) | **Resolved — manually verified (local)** | `utils/mediaAssets.ts`: mezzanine CDN fallback when processing active; verified 2026-07-03 — MP4 during processing, HLS after `ready`; report: `r2-processing-gap-trace.md` |
 | Comment creation failure (PGRST205 / missing `video_comments`) | **Resolved — manually verified (local)** | P0 SQL `supabase-p0-legacy-review-tables.sql`; verified 2026-07-03 — create, persist, timestamps, thumbnails; reports: `comment-create-failure-trace.md`, `comment-review-workflow-map.md` |
 | Comment author + avatar (Option A) | **Resolved — manually verified (local, 2026-07-03)** | P1 SQL applied; `author_display_name`, `author_avatar_url`, `resolveCommentAuthor()`, `CommentAuthorBadge`, `CommentsPanel`; name + avatar/initials; reload preserves identity; report: `comment-author-avatar-plan.md` |
-| Review Session Complete / feedback notify (`POST /api/notify`) | **Working — manually verified (local)** | Notify Team + Compile & Send deliver Discord + email summary (file name + comment count); verified 2026-07-03; `compiledNotes` body still not in API schema — see `comment-review-workflow-map.md` |
+| Review Session Complete / compiledNotes notify (`POST /api/notify`) | **Resolved — manually verified (local, 2026-07-03)** | Compile & Send: `compiledNotes` in email **Feedback Notes** + Discord field; timestamps + author names; HTML escape; Notify Team summary-only; report: `compiled-notes-notify-trace.md` |
 | Compare workflow (Cloud CDN side-by-side) | **Resolved — manually verified (local, 2026-07-03)** | Fix 1 + 2 in `page.tsx` + `StreamingVideoPlayer.tsx`; V1/V2 side-by-side, cloud + vault compare, initial sync, no ghost playback; report: `compare-workflow-regression-report.md` |
 
 ---
@@ -478,7 +480,7 @@ Items below are **not confirmed** by direct inspection in this workspace. Do not
 | **Backend deployed to production** | No hosting config in repo; backend not deployed |
 | **Legacy Supabase P1 tables in new project** | `project_status`, `project_status_details`, `client_invoices` — not yet created; see `legacy-supabase-tables-migration-plan.md` |
 | **Legacy Supabase P0 tables (production)** | `video_comments`, `video_metadata` verified **local dev only** (2026-07-03); production Supabase not re-tested |
-| **Review notify / feedback summary (production)** | Notify flow verified **local dev only** (2026-07-03); production Resend/Discord env not re-tested |
+| **Review notify / compiledNotes (production)** | Compile & Send + Notify Team verified **local dev only** (2026-07-03); production Resend/Discord + full notes delivery not re-tested |
 | **Comment author + avatar (production)** | Resolved **local dev only** (2026-07-03); production Supabase P1 SQL not re-tested |
 | **Compare workflow (production)** | Resolved **local dev only** (2026-07-03); production not tested |
 | **Supabase Storage bucket `client-vault`** | Referenced in admin/dashboard code; not confirmed in new project |
@@ -490,6 +492,20 @@ Items below are **not confirmed** by direct inspection in this workspace. Do not
 ## 15. Recent Completed Work (verified local — 2026-07-03)
 
 Only items confirmed by **local dev** manual verification on 2026-07-03. **Production not covered** — see §14.
+
+### Verification summary (local dashboard QA — 2026-07-03)
+
+| Workflow | Status |
+|----------|--------|
+| Upload refresh (QA-002) | Resolved |
+| FINALIZING hang (QA-001) | Resolved |
+| R2 playback during transcode | Resolved |
+| Comment create / persist (P0) | Resolved |
+| Comment author + avatar (P1) | Resolved |
+| Compare workflow (V1/V2) | Resolved |
+| Review notify — Notify Team (summary) | Resolved |
+| Review notify — Compile & Send (`compiledNotes`) | Resolved |
+| Production deploy / live env | **Pending §14** |
 
 ### Schema & API (code present)
 
@@ -513,10 +529,11 @@ Only items confirmed by **local dev** manual verification on 2026-07-03. **Produ
 - [x] **R2 processing gap** — Playback during transcode: `getMediaPlaybackUrl()` returns mezzanine CDN MP4 while `processingStatus` is active (`queued`/`probing`/`transcoding`/`uploading`); HLS still preferred when `ready` (`utils/mediaAssets.ts`). Report: `r2-processing-gap-trace.md`. **Resolved — manually verified (local, 2026-07-03):** original MP4 plays during processing; HLS takeover after `ready`.
 - [x] **Comment creation (P0 legacy tables)** — `video_comments` + `video_metadata` created via `supabase-p0-legacy-review-tables.sql`; PGRST205 resolved. **Resolved — manually verified (local, 2026-07-03):** comment create, persistence, timestamp jump, scene thumbnails. Reports: `comment-create-failure-trace.md`, `comment-review-workflow-map.md`.
 - [x] **Comment author + avatar (Option A)** — `author_display_name` / `author_avatar_url` on insert via `resolveCommentAuthor()`; `CommentAuthorBadge` + name in `CommentsPanel`; initials fallback; multi-reviewer identity. SQL: `supabase-p1-comment-author-columns.sql` applied. Report: `comment-author-avatar-plan.md`. **Resolved — manually verified (local, 2026-07-03):** name, avatar/initials, reload preserves identity.
-- [x] **Review Session Complete / feedback notify** — `handleNotifyTeam` + `handleCompileAndSend` → `POST /api/notify` (Discord embed + Resend email with file name + comment count). **Working — manually verified (local, 2026-07-03).** Known limitation: API `reviewSchema` does not include `compiledNotes` — full compiled text not in email body yet (`comment-review-workflow-map.md` §6).
+- [x] **Review Session Complete / compiledNotes notify** — `compiledNotes` in `/api/notify`; email **Feedback Notes** + Discord **📝 Compiled Notes** on **Compile & Send**; Notify Team summary-only; HTML escape. Report: `compiled-notes-notify-trace.md`. **Resolved — manually verified (local, 2026-07-03).**
+- [x] **Review Session Complete / feedback notify (summary)** — `handleNotifyTeam` → `POST /api/notify` (Discord embed + Resend email with file name + comment count). **Resolved — manually verified (local, 2026-07-03).**
 - [x] **Compare workflow (Cloud CDN)** — V1 (Reference) + V2 (Current) side-by-side; compare dropdown; cloud/R2 + vault compare; initial sync; no ghost/background playback; single player when compare off. Reports: `compare-workflow-regression-report.md`. **Resolved — manually verified (local, 2026-07-03).**
 
-> **Local vs production:** Dashboard QA items above (upload, comments, compare, reviewer identity, review notify, R2 playback) are **local dev only** unless noted. Production — see §14.
+> **Local vs production:** Dashboard QA items above (upload, comments, compare, reviewer identity, review notify + compiledNotes, R2 playback) are **local dev only** unless noted. Production — see §14.
 
 ### Documentation
 
@@ -631,6 +648,8 @@ When assisting with this project, keep these constraints in mind:
 
 | Date | Decision | Rationale |
 |------|----------|-----------|
+| 2026-07-03 | `compiledNotes` notify workflow manually verified local | Compile & Send: email + Discord notes; Notify Team summary-only; production §14; report: `compiled-notes-notify-trace.md` |
+| 2026-07-03 | `compiledNotes` notify fix implemented (`/api/notify` + compile format) | Superseded by manual verify same day |
 | 2026-07-03 | Comment author + avatar manually verified local (P1 SQL applied) | Production remains §14 |
 | 2026-07-03 | Compare workflow + comment author/avatar: local QA complete; PR branch `monorepo-stabilization-2026-07-03` | Production remains §14 |
 | 2026-07-03 | Dashboard QA session: QA-001/002, R2 playback gap, P0 comments, review notify verified **local** | Document before GitHub push; production remains §14 |

@@ -313,7 +313,7 @@ Vault grid name is synthesized in `useFileManager.mapMediaAssetToVaultFile`:
 | **Approve** (asset sign-off) | ❌ Not in dashboard | No approve button or status on `MediaAsset` |
 | **Lock** | ⚠️ Partial | Picture lock — see below |
 | **Notify Team** | ✅ Verified (local, 2026-07-03) | `handleNotifyTeam` → `POST /api/notify` — Discord + email |
-| **Compile & Send** | ✅ Verified (local, 2026-07-03) — partial | `handleCompileAndSend` → same API; **Review Session Complete** email/Discord delivered. `compiledNotes` still **not** in API schema — body is summary (file + count), not full compiled text |
+| **Compile & Send** | ✅ **Resolved — manually verified (local, 2026-07-03)** | `handleCompileAndSend` → `POST /api/notify` with `compiledNotes`; email **Feedback Notes** + Discord **📝 Compiled Notes**; format `[M:SS] Author: text`; HTML escape verified — `compiled-notes-notify-trace.md` |
 | **Download Report** | ✅ Client-only | `.txt` blob, no server |
 | **Project status** | ✅ Admin only | `project_status` dropdown — production pipeline, not review approval |
 
@@ -339,7 +339,13 @@ Vault grid name is synthesized in `useFileManager.mapMediaAssetToVaultFile`:
 
 - Requires authenticated Supabase user
 - Sends Discord embed + Resend email to `CONTACT_EMAIL`
-- Body: `fileName`, `totalComments` only — **`compiledNotes` not in Zod schema, discarded**
+- Body: `fileName`, `totalComments` required; `compiledNotes` optional (max 100k chars)
+- **Notify Team:** summary only (no `compiledNotes`)
+- **Compile & Send:** includes escaped notes in email `<pre>` + Discord field (truncated at 1000 chars)
+
+### Compile & Send
+
+`handleCompileAndSend` builds `compiledNotes` via `formatCompiledNoteLine()` — `[M:SS] Author: comment text` per line — and POSTs to `/api/notify` with `compiledNotes` set.
 
 ### Picture lock
 
@@ -414,7 +420,7 @@ Vault grid name is synthesized in `useFileManager.mapMediaAssetToVaultFile`:
 | Dashboard fetch without `user_id` | **Medium** | Cross-client leakage if RLS weak |
 | `video_comments` table missing in new Supabase | ~~**High**~~ **Resolved (local)** | P0 SQL applied 2026-07-03; PGRST205 fixed |
 | Picture lock wrong storage/key | **High** | Lock workflow unreliable on R2 path |
-| `compiledNotes` dropped by API | **Medium** | “Send” button does not email full notes |
+| `compiledNotes` dropped by API | ~~**Medium**~~ **Resolved — manually verified (local, 2026-07-03)** | Optional `compiledNotes` in `reviewSchema`; email + Discord templates; see `compiled-notes-notify-trace.md` |
 
 ### UX
 
@@ -512,7 +518,7 @@ Execute in order — each step gates the next.
 | Inspection | ✅ Complete |
 | P0 Supabase tables | ✅ **Created — manually verified (local, 2026-07-03)** |
 | Comment create / persist / timestamps / thumbnails | ✅ **Manually verified (local, 2026-07-03)** |
-| Review Session Complete / notify (`POST /api/notify`) | ✅ **Working — manually verified (local, 2026-07-03)** |
+| Review Session Complete / notify (`POST /api/notify`) | ✅ **Resolved — manually verified (local, 2026-07-03)** — Notify Team summary-only; Compile & Send includes `compiledNotes` in email/Discord |
 | Production Supabase / Resend / Discord | ⏳ Not verified |
 | P1 admin tables | ⏳ Not yet created (`project_status`, etc.) |
 | Application code changes | ⏳ None for P0 resolution |
