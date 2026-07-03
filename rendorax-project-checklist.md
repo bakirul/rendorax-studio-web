@@ -574,6 +574,7 @@ Each item appears **once**. Production-specific checks are in §14 unless listed
 
 ### Low priority / polish
 
+- [ ] **AI Quality Check & Improvement Suggestions** — spec + phased rollout; see `review-collaboration-layer-map.md` §8 (not started)
 - [ ] Fix missing `/assets/logo.png` (404 in dev logs)
 - [ ] Remove deprecated `app/api/upload-chunk` route or redirect
 - [ ] Connect `getProjects()` in `src/lib/api.ts` or remove dead code
@@ -648,6 +649,7 @@ When assisting with this project, keep these constraints in mind:
 
 | Date | Decision | Rationale |
 |------|----------|-----------|
+| 2026-07-03 | Collaboration layer map updated: compiledNotes resolved + AI Quality Check roadmap §8 | `review-collaboration-layer-map.md`; production §14 |
 | 2026-07-03 | `compiledNotes` notify workflow manually verified local | Compile & Send: email + Discord notes; Notify Team summary-only; production §14; report: `compiled-notes-notify-trace.md` |
 | 2026-07-03 | `compiledNotes` notify fix implemented (`/api/notify` + compile format) | Superseded by manual verify same day |
 | 2026-07-03 | Comment author + avatar manually verified local (P1 SQL applied) | Production remains §14 |
