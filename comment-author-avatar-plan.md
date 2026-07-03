@@ -1,7 +1,7 @@
 # Comment Author + Avatar — Inspection Plan
 
 **Inspection date:** 2026-07-03  
-**Status:** **Implemented — pending manual verify (local, 2026-07-03)** — production not verified  
+**Status:** **Resolved — manually verified (local, 2026-07-03)** — production not verified  
 **Goal:** Show commenter **display name** and **avatar** in the dashboard comments sidebar for multi-reviewer workflows.
 
 ### Feature summary
@@ -369,8 +369,18 @@ All of Option A **plus** profile sync hook, join in `fetchComments`, migration S
 | Recommended approach | **Option A** — denormalized `author_*` columns + session helper + `CommentsPanel` |
 | SQL migration | ✅ `supabase-p1-comment-author-columns.sql` (apply in Supabase before test) |
 | Implementation | ✅ Complete (2026-07-03) |
-| Manual verification | ⏳ **Pending (local)** — feature working per team QA; formal sign-off pending |
+| Manual verification | ✅ **Resolved — manually verified (local, 2026-07-03)** |
 | Production verification | ⏳ Pending |
+
+### Manual verification (local, 2026-07-03)
+
+| Check | Result |
+|-------|--------|
+| `supabase-p1-comment-author-columns.sql` applied | ✅ |
+| New comment saves `author_display_name` | ✅ |
+| Sidebar shows commenter name | ✅ |
+| Avatar or initials fallback | ✅ |
+| Reload preserves author identity | ✅ |
 
 ---
 
