@@ -8,6 +8,13 @@ import {
   resolveCommentAuthor,
   type VideoCommentRow,
 } from "@/utils/commentAuthor";
+import {
+  buildMarkerRows,
+  buildMarkersCsv,
+  buildMarkersJson,
+  buildMarkersFilename,
+  downloadTextFile,
+} from "@/utils/exportReviewMarkers";
 
 function formatCommentTimecode(seconds: number): string {
   return `${Math.floor(seconds / 60)}:${("0" + Math.floor(seconds % 60)).slice(-2)}`;
@@ -299,6 +306,43 @@ export const useLiveComments = (
     }
   };
 
+  const handleExportMarkers = (format?: "csv" | "json") => {
+    if (comments.length === 0) {
+      alert("No comments to export.");
+      return;
+    }
+    const fileName = previewFile?.name ?? comments[0]?.file_name ?? "unknown";
+    const rows = buildMarkerRows(comments, fileName);
+
+    const exportCsv = () => {
+      downloadTextFile(
+        buildMarkersCsv(rows),
+        buildMarkersFilename(fileName, "csv"),
+        "text/csv;charset=utf-8",
+      );
+    };
+
+    const exportJson = () => {
+      downloadTextFile(
+        buildMarkersJson(rows),
+        buildMarkersFilename(fileName, "json"),
+        "application/json",
+      );
+    };
+
+    if (format === "csv") {
+      exportCsv();
+      return;
+    }
+    if (format === "json") {
+      exportJson();
+      return;
+    }
+
+    exportCsv();
+    window.setTimeout(exportJson, 150);
+  };
+
   const handleDownloadReport = () => {
     if (comments.length === 0) {
       alert("No comments to generate a report.");
@@ -351,6 +395,7 @@ export const useLiveComments = (
     handleNotifyTeam,
     handleCompileAndSend,
     handleDownloadReport,
+    handleExportMarkers,
     jumpToTime,
   };
 };
