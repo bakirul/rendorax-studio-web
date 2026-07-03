@@ -1,0 +1,185 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["public", "auth"]
+}
+
+enum MediaProcessingStatus {
+  queued
+  probing
+  transcoding
+  uploading
+  ready
+  failed
+
+  @@schema("public")
+}
+
+enum MediaPlaybackFormat {
+  hls
+  progressive
+  none
+
+  @@schema("public")
+}
+
+model Project {
+  id          String   @id @default(uuid())
+  title       String
+  category    String
+  videoUrl    String?
+  thumbnail   String?
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@schema("public")
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  email     String
+  subject   String
+  content   String
+  createdAt DateTime @default(now())
+
+  @@schema("public")
+}
+
+model MediaAsset {
+  id                String               @id @default(uuid())
+  fileName          String
+  publicUrl         String
+  thumbnailUrl      String?
+  objectKey         String?
+  mimeType          String
+  fileSize          Int?
+  folder            String?
+  userId            String?
+  durationMs        Int?
+  width             Int?
+  height            Int?
+  frameRate         Float?
+  playbackObjectKey String?
+  playbackFormat    MediaPlaybackFormat?
+  processingStatus  MediaProcessingStatus?
+  proxyVersion      Int                  @default(1)
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  processingJobs    MediaProcessingJob[]
+
+  @@index([userId])
+  @@index([objectKey])
+  @@index([createdAt])
+  @@index([processingStatus])
+  @@schema("public")
+}
+
+model MediaProcessingJob {
+  id           String                @id @default(uuid())
+  assetId      String
+  status       MediaProcessingStatus @default(queued)
+  progress     Int                   @default(0)
+  errorCode    String?
+  errorMessage String?
+  workerId     String?
+  attempts     Int                   @default(0)
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+  asset        MediaAsset            @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([assetId])
+  @@index([status])
+  @@index([createdAt])
+  @@schema("public")
+}
+
+model MediaFolder {
+  id        String   @id @default(uuid())
+  path      String
+  userId    String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, path])
+  @@index([userId])
+  @@schema("public")
+}
+
+// ── Agency Management ────────────────────────────────────────────────────────
+// Portfolio showcase projects remain in the `Project` model above.
+// Agency workflow projects live in `AgencyProject` to avoid a naming collision.
+
+enum AgencyRole {
+  admin
+  editor
+  client
+
+  @@schema("public")
+}
+
+enum TaskStatus {
+  todo
+  in_progress
+  in_review
+  done
+
+  @@schema("public")
+}
+
+/// Studio team member — `id` matches Supabase `auth.users.id`.
+model User {
+  id             String          @id
+  email          String          @unique
+  displayName    String?
+  role           AgencyRole      @default(editor)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  assignedTasks  Task[]
+  ownedProjects  AgencyProject[] @relation("ProjectOwner")
+  clientProjects AgencyProject[] @relation("ProjectClient")
+
+  @@schema("public")
+}
+
+model AgencyProject {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  status      String   @default("active")
+  ownerId     String
+  clientId    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  owner       User     @relation("ProjectOwner", fields: [ownerId], references: [id])
+  client      User?    @relation("ProjectClient", fields: [clientId], references: [id], onDelete: SetNull)
+  tasks       Task[]
+
+  @@index([ownerId])
+  @@index([clientId])
+  @@index([status])
+  @@schema("public")
+}
+
+model Task {
+  id          String        @id @default(uuid())
+  title       String
+  description String?
+  status      TaskStatus    @default(todo)
+  dueDate     DateTime?
+  projectId   String
+  assigneeId  String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  project     AgencyProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignee    User?         @relation(fields: [assigneeId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([assigneeId])
+  @@index([status])
+  @@schema("public")
+}

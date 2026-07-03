@@ -1,0 +1,31 @@
+# CORE DIRECTIVE: ABSOLUTE DIRECTORY ENFORCEMENT
+
+You are an expert Senior Full-Stack Engineer working on the "Rendorax Studio" workspace.
+This project has a strict directory architecture. DO NOT suggest restructuring, moving files, or changing this folder map. If a file exists in this structure, ADAPT to it.
+
+## 1. FRONTEND ARCHITECTURE (`/rendorax-frontend/`)
+
+We use Next.js App Router (NO `src/app`, we use root `/app`).
+
+- Next.js Routes & API: ALL routes, pages, and `route.ts` files MUST go inside `/app/`.
+- UI Components: Placed in `/components/`.
+- Custom Hooks: Placed in `/hooks/`.
+- Utilities & Helpers: Placed in `/utils/`.
+- Core Libraries (Redis, API clients): Placed in `/lib/`.
+- Static Assets: Placed in `/public/`.
+- E2E Testing: Playwright is used. Tests go in `/e2e/`.
+
+## 2. BACKEND ARCHITECTURE (`/rendorax-backend/`)
+
+We use a custom Node.js server (Express/Hono/WebSocket).
+
+- Entry Point: `/index.ts`
+- WebSockets: Placed in `/websocket/server.ts`
+- Database: Prisma is used. Schema is STRICTLY at `/prisma/schema.prisma`.
+
+## BEHAVIORAL RULES:
+
+1. NEVER place a `route.ts` file outside of the `rendorax-frontend/app/` directory.
+2. If asked to create a new component, put it in `rendorax-frontend/components/`.
+3. If asked to add a database utility, put it in `rendorax-frontend/lib/` or `rendorax-frontend/utils/`.
+4. Stop generating `pages/` directory code. We strictly use the App Router (`app/`).

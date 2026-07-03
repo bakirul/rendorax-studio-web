@@ -1,0 +1,219 @@
+import { Router } from "express";
+import type { Response } from "express";
+import type { Prisma, PrismaClient } from "@prisma/client";
+import {
+  requireAuth,
+  type AuthenticatedRequest,
+} from "../middleware/requireAuth";
+import { ensureAgencyUser, mapSupabaseRoleToAgencyRole } from "../lib/agencyUsers";
+
+const router = Router();
+
+router.use(requireAuth);
+
+function getPrisma(req: AuthenticatedRequest): PrismaClient {
+  return req.app.locals.prisma as PrismaClient;
+}
+
+function isAdminRole(role: string | undefined): boolean {
+  return role === "admin";
+}
+
+async function requireAgencyUser(req: AuthenticatedRequest, res: Response) {
+  if (!req.user?.id) {
+    res.status(401).json({ error: "Unauthorized" });
+    return null;
+  }
+
+  try {
+    return await ensureAgencyUser(getPrisma(req), req.user);
+  } catch (error) {
+    console.error("Failed to sync agency user:", error);
+    res.status(400).json({ error: "Unable to resolve authenticated user" });
+    return null;
+  }
+}
+
+router.post("/projects", async (req: AuthenticatedRequest, res: Response) => {
+  const actor = await requireAgencyUser(req, res);
+  if (!actor) return;
+
+  const role = mapSupabaseRoleToAgencyRole(req.user?.role);
+  if (role === "client") {
+    res.status(403).json({ error: "Clients cannot create projects" });
+    return;
+  }
+
+  const { title, description, clientId, status } = req.body ?? {};
+  if (typeof title !== "string" || !title.trim()) {
+    res.status(400).json({ error: "Project title is required" });
+    return;
+  }
+
+  const prisma = getPrisma(req);
+
+  if (clientId !== undefined && clientId !== null) {
+    if (typeof clientId !== "string" || !clientId.trim()) {
+      res.status(400).json({ error: "clientId must be a non-empty string" });
+      return;
+    }
+
+    const client = await prisma.user.findUnique({ where: { id: clientId } });
+    if (!client) {
+      res.status(404).json({ error: "Client user not found" });
+      return;
+    }
+  }
+
+  try {
+    const project = await prisma.agencyProject.create({
+      data: {
+        title: title.trim(),
+        description:
+          typeof description === "string" ? description.trim() || null : null,
+        status: typeof status === "string" && status.trim() ? status.trim() : "active",
+        ownerId: actor.id,
+        clientId:
+          typeof clientId === "string" && clientId.trim() ? clientId.trim() : null,
+      },
+      include: {
+        owner: { select: { id: true, email: true, displayName: true, role: true } },
+        client: { select: { id: true, email: true, displayName: true, role: true } },
+      },
+    });
+
+    res.status(201).json(project);
+  } catch (error) {
+    console.error("Failed to create agency project:", error);
+    res.status(500).json({ error: "Failed to create project" });
+  }
+});
+
+router.post("/tasks", async (req: AuthenticatedRequest, res: Response) => {
+  const actor = await requireAgencyUser(req, res);
+  if (!actor) return;
+
+  const role = mapSupabaseRoleToAgencyRole(req.user?.role);
+  if (role === "client") {
+    res.status(403).json({ error: "Clients cannot create tasks" });
+    return;
+  }
+
+  const { projectId, title, description, assigneeId, dueDate, status } =
+    req.body ?? {};
+
+  if (typeof projectId !== "string" || !projectId.trim()) {
+    res.status(400).json({ error: "projectId is required" });
+    return;
+  }
+
+  if (typeof title !== "string" || !title.trim()) {
+    res.status(400).json({ error: "Task title is required" });
+    return;
+  }
+
+  if (typeof assigneeId !== "string" || !assigneeId.trim()) {
+    res.status(400).json({ error: "assigneeId is required" });
+    return;
+  }
+
+  const prisma = getPrisma(req);
+  const project = await prisma.agencyProject.findUnique({
+    where: { id: projectId.trim() },
+  });
+
+  if (!project) {
+    res.status(404).json({ error: "Project not found" });
+    return;
+  }
+
+  if (!isAdminRole(req.user?.role) && project.ownerId !== actor.id) {
+    res.status(403).json({ error: "You can only add tasks to projects you own" });
+    return;
+  }
+
+  const assignee = await prisma.user.findUnique({
+    where: { id: assigneeId.trim() },
+  });
+  if (!assignee) {
+    res.status(404).json({ error: "Assignee user not found" });
+    return;
+  }
+
+  let parsedDueDate: Date | null = null;
+  if (dueDate !== undefined && dueDate !== null && dueDate !== "") {
+    const candidate = new Date(dueDate);
+    if (Number.isNaN(candidate.getTime())) {
+      res.status(400).json({ error: "dueDate must be a valid ISO date string" });
+      return;
+    }
+    parsedDueDate = candidate;
+  }
+
+  const allowedStatuses = new Set(["todo", "in_progress", "in_review", "done"]);
+  const nextStatus =
+    typeof status === "string" && allowedStatuses.has(status) ? status : "todo";
+
+  try {
+    const task = await prisma.task.create({
+      data: {
+        title: title.trim(),
+        description:
+          typeof description === "string" ? description.trim() || null : null,
+        projectId: project.id,
+        assigneeId: assignee.id,
+        dueDate: parsedDueDate,
+        status: nextStatus as Prisma.TaskCreateInput["status"],
+      },
+      include: {
+        project: { select: { id: true, title: true, status: true } },
+        assignee: { select: { id: true, email: true, displayName: true, role: true } },
+      },
+    });
+
+    res.status(201).json(task);
+  } catch (error) {
+    console.error("Failed to create task:", error);
+    res.status(500).json({ error: "Failed to create task" });
+  }
+});
+
+router.get("/tasks", async (req: AuthenticatedRequest, res: Response) => {
+  const actor = await requireAgencyUser(req, res);
+  if (!actor) return;
+
+  const prisma = getPrisma(req);
+  const role = mapSupabaseRoleToAgencyRole(req.user?.role);
+
+  let where: Prisma.TaskWhereInput;
+  if (role === "admin") {
+    where = {};
+  } else if (role === "client") {
+    where = {
+      OR: [
+        { assigneeId: actor.id },
+        { project: { clientId: actor.id } },
+      ],
+    };
+  } else {
+    where = { assigneeId: actor.id };
+  }
+
+  try {
+    const tasks = await prisma.task.findMany({
+      where,
+      orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
+      include: {
+        project: { select: { id: true, title: true, status: true } },
+        assignee: { select: { id: true, email: true, displayName: true, role: true } },
+      },
+    });
+
+    res.json({ tasks, role });
+  } catch (error) {
+    console.error("Failed to fetch tasks:", error);
+    res.status(500).json({ error: "Failed to fetch tasks" });
+  }
+});
+
+export default router;

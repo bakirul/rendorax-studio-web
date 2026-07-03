@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- Dark Premium Background with rounded corners -->
+  <rect width="256" height="256" rx="56" fill="#0a0a0a"/>
+  
+  <!-- Golden Border -->
+  <rect x="12" y="12" width="232" height="232" rx="44" fill="none" stroke="#d4af37" stroke-width="6"/>
+  
+  <!-- Golden 'R' Lettermark -->
+  <path d="M96 184V72h44c22.1 0 40 17.9 40 40 0 15.5-8.8 28.9-21.7 35.5L184 184h-28.3l-22.6-32h-13v32H96zm24-52h18c11 0 20-9 20-20s-9-20-20-20h-18v40z" fill="#d4af37"/>
+</svg>
