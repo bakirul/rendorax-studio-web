@@ -59,6 +59,7 @@ model MediaAsset {
   fileSize          Int?
   folder            String?
   userId            String?
+  agencyProjectId   String?
   durationMs        Int?
   width             Int?
   height            Int?
@@ -70,8 +71,10 @@ model MediaAsset {
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
   processingJobs    MediaProcessingJob[]
+  agencyProject     AgencyProject?       @relation(fields: [agencyProjectId], references: [id], onDelete: SetNull)
 
   @@index([userId])
+  @@index([agencyProjectId])
   @@index([objectKey])
   @@index([createdAt])
   @@index([processingStatus])
@@ -147,17 +150,22 @@ model User {
 }
 
 model AgencyProject {
-  id          String   @id @default(uuid())
-  title       String
-  description String?
-  status      String   @default("active")
-  ownerId     String
-  clientId    String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  owner       User     @relation("ProjectOwner", fields: [ownerId], references: [id])
-  client      User?    @relation("ProjectClient", fields: [clientId], references: [id], onDelete: SetNull)
-  tasks       Task[]
+  id             String       @id @default(uuid())
+  title          String
+  description    String?
+  status         String       @default("Awaiting Assets")
+  deadline       DateTime?
+  videoLength    String?
+  editingStyle   String?
+  referenceLinks String?
+  ownerId        String
+  clientId       String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  owner          User         @relation("ProjectOwner", fields: [ownerId], references: [id])
+  client         User?        @relation("ProjectClient", fields: [clientId], references: [id], onDelete: SetNull)
+  tasks          Task[]
+  assets         MediaAsset[]
 
   @@index([ownerId])
   @@index([clientId])
