@@ -102,3 +102,38 @@ After every completed task:
 - Update known issues section
 - Update next steps section
 - Add decision log entry if applicable
+
+---
+
+## Model Selection Policy
+
+Rules:
+
+1. Never use Auto Mode for:
+   - Database changes
+   - Schema changes
+   - Supabase
+   - R2 architecture
+   - Authentication
+   - Admin HQ
+   - Timeline Sharing
+   - Operations Core
+   - Agency workflows
+   - Production infrastructure
+
+2. Inspection / Audit / Root Cause Analysis
+   - Use strongest reasoning model available.
+
+3. Architecture decisions
+   - Use strongest reasoning model available.
+
+4. Approved implementation
+   - Use strongest coding model available.
+
+5. Small isolated fixes
+   - Fast coding model allowed.
+
+6. Every report must include:
+   Recommended Model:
+   Reason:
+   Task Type:

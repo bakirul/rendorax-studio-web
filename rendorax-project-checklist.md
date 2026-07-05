@@ -2,8 +2,23 @@
 
 > **Generated for:** ChatGPT / AI assistant context upload  
 > **Workspace root:** `C:\Users\user\rendorax-studio`  
-> **Last updated:** July 4, 2026 (timeline comment markers verified local; production verification pending)  
+> **Last updated:** July 4, 2026 (design/UI regression freeze audit; feature work frozen)  
 > **Do not paste secret values from this file into public channels — variable names only.**
+
+### ⛔ Feature work freeze (2026-07-04)
+
+**Status:** **FROZEN** until `design-regression-freeze-audit.md` recovery plan is reviewed and Phase 1 QA passes.
+
+| Blocked until thaw | Allowed |
+|--------------------|---------|
+| Operations WP2+ | Inspection / documentation |
+| Admin ops UI wiring | Manual UI QA (operator) |
+| Timeline Sharing Phase 2+ | Committing approved admin recovery bundle |
+| New dashboard/admin features | P0 asset loading fix (after QA approval) |
+
+**WP1 Prisma schema:** Complete — no further backend feature work until thaw.
+
+---
 
 ### Source of truth (mandatory for all AI agents)
 
@@ -24,7 +39,24 @@
 - `timeline-comment-markers-plan.md` — scrubber comment markers (Phase 1 verified local)
 - `offline-timeline-marker-export-plan.md` — NLE marker CSV/JSON export (Phase 1 verified local)
 - `premiere-xml-marker-export-plan.md` — Premiere Pro xmeml XML export (Phase 2a verified local)
+- `timeline-sharing-restoration-blueprint.md` — OTS timeline share restoration (Phase 1 implemented)
 - `timeline-sharing-regression-report.md` — live screen share inspection
+- `timeline-sharing-production-readiness.md` — Phase 2–4 production readiness audit (2026-07-04)
+- `operations-core-gap-analysis.md` — client/project/team ops gaps + Phase 1–3 roadmap (2026-07-04)
+- `operations-core-phase1-blueprint.md` — canonical project model, ERD, migration strategy (2026-07-04)
+- `operations-core-phase1-implementation-plan.md` — WP0–WP10 implementation plan; approved OC-P1-01–07 (2026-07-04)
+- `operations-core-phase1-preflight.md` — WP0 pre-flight; conditional GO for WP1 (2026-07-04)
+- `design-regression-freeze-audit.md` — UI regression freeze + recovery plan (2026-07-04)
+- `operations-core-wp1-report.md` — WP1 Prisma schema + migration complete (2026-07-04)
+- `admin-login-failure-trace.md` — admin auth inspection (login flow, role source)
+- `admin-account-setup-guide.md` — Supabase Dashboard operator guide for admin provisioning
+- `admin-dashboard-qa-issue-map.md` — admin HQ broken-area inspection (ADM-001–017)
+- `admin-hq-recovery-phase1.md` — Phase 1 ops verification (P1 tables, bucket, backend)
+- `admin-storage-architecture-review.md` — R2 vs `client-vault` architecture decision
+- `admin-client-discovery-migration-plan.md` — MediaAsset client discovery (Phase 1 implemented)
+- `admin-hq-initialization-hang-trace.md` — init spinner hang trace + fix (implemented 2026-07-04)
+- `admin-hq-asset-loading-trace.md` — Vault Assets empty list inspection (pending fix)
+- `admin-hq-design-regression-report.md` — white background + global widgets on `/admin` (pending fix)
 
 ---
 
@@ -452,7 +484,9 @@ npm run dev
 | `utils/agencyBackend.ts` top-level `return` | **Fixed (local)** | Logic moved inside `proxyAgencyRequest` |
 | Prisma P1000 auth failed | **Fixed (local)** | DB URLs consolidated to `.env.local` only |
 | `npm run build` (frontend) | **Passing (local)** | Verified via `npm run build` |
-| Agency API UI | **Not implemented** | Backend + proxy routes exist; no dashboard/admin UI |
+| Agency API UI | **Not implemented** | Backend + proxy routes exist; no dashboard/admin UI — see `operations-core-gap-analysis.md` |
+| UI / design regression freeze | **ACTIVE** | Admin recovery uncommitted; dashboard shell stable — `design-regression-freeze-audit.md` |
+| Operations core (clients/projects/team) | WP1 done; **WP2+ frozen** | Gap analysis complete; resume after UI QA |
 | Backend production hosting | **Not configured** | No Dockerfile or platform config in repo |
 | `websocket/server.ts` (port 3001) | **Orphaned** | Not imported by `index.ts` — legacy |
 | `rendorax-backend/schema.prisma` (root) | **Stale** | Use `prisma/schema.prisma` instead |
@@ -468,6 +502,10 @@ npm run dev
 | Timeline comment markers (scrubber) | **Resolved — manually verified (local, 2026-07-03)** | `VideoTimelineScrubber` ticks from `video_comments.time_stamp`; tooltip + `jumpToTime`; report: `timeline-comment-markers-plan.md` |
 | Offline timeline marker export (CSV + JSON) | **Resolved — manually verified (local, 2026-07-03)** | Vault toolbar **Export Markers**; `exportReviewMarkers.ts`; SMPTE @ 24fps; author via `getCommentDisplayName()`; report: `offline-timeline-marker-export-plan.md` |
 | Premiere Pro XML marker export (xmeml) | **Resolved — manually verified (local, 2026-07-03)** | `buildMarkersXmeml()`; File → Import in Premiere; sequence markers; report: `premiere-xml-marker-export-plan.md` |
+| Admin login (`admin-studio@kachnamedia.com`) | **Resolved — operator verified (2026-07-04)** | `app_metadata.role = admin`; `/admin` accessible; report: `admin-login-failure-trace.md`, `admin-account-setup-guide.md` |
+| Admin dashboard HQ (functional) | **Partial — Phase 1 + init hang fix (2026-07-04)** | Sidebar from `GET /api/media/clients`; shell no longer blocked on discovery; manual verify pending |
+| Admin HQ visual system | **Comm strip + loading UX implemented — pending manual verify (2026-07-04)** | Embedded live tools + header AI; no floating duplicates on `/admin`; `admin-hq-design-regression-report.md` |
+| Admin HQ Vault Assets empty | **Open — inspected (2026-07-04)** | Silent `fetchMediaAssets` error masking; `admin-hq-asset-loading-trace.md` |
 
 ---
 
@@ -484,15 +522,17 @@ Items below are **not confirmed** by direct inspection in this workspace. Do not
 | **Supabase Auth URL Configuration** | Site URL + Redirect URLs for production domain(s) not confirmed |
 | **R2 upload and playback (production)** | Local credentials exist; live CDN/playback not tested |
 | **Backend deployed to production** | No hosting config in repo; backend not deployed |
-| **Legacy Supabase P1 tables in new project** | `project_status`, `project_status_details`, `client_invoices` — not yet created; see `legacy-supabase-tables-migration-plan.md` |
+| **Legacy Supabase P1 tables in new project** | `project_status`, `project_status_details`, `client_invoices` — **present (PostgREST 200, WP0 2026-07-04)**; tables empty; RLS live test pending — `operations-core-phase1-preflight.md` |
 | **Legacy Supabase P0 tables (production)** | `video_comments`, `video_metadata` verified **local dev only** (2026-07-03); production Supabase not re-tested |
 | **Review notify / compiledNotes (production)** | Compile & Send + Notify Team verified **local dev only** (2026-07-03); production Resend/Discord + full notes delivery not re-tested |
 | **Comment author + avatar (production)** | Resolved **local dev only** (2026-07-03); production Supabase P1 SQL not re-tested |
 | **Compare workflow (production)** | Resolved **local dev only** (2026-07-03); production not tested |
 | **Offline timeline marker export (production)** | CSV + JSON + XML export verified **local dev only** (2026-07-03); production not tested |
-| **Supabase Storage bucket `client-vault`** | Referenced in admin/dashboard code; not confirmed in new project |
+| **Supabase Storage bucket `client-vault`** | Legacy — admin sidebar only; **do not create for Admin HQ**; `admin-client-discovery-migration-plan.md` |
 | **Redis/BullMQ transcode worker (production)** | Optional; requires `REDIS_URL` — not verified live |
-| **Admin `app_metadata.role` for users** | Users may lack `role` after migration — affects `/admin` access |
+| **Admin `app_metadata.role` for users** | Operator account verified 2026-07-04; other users may still lack role |
+| **Admin dashboard HQ panels** | P1 tables + client discovery migration — `admin-client-discovery-migration-plan.md`, `admin-dashboard-qa-issue-map.md` |
+| **Admin HQ visual system** | Fix A+B applied — pending local verify — `admin-hq-design-regression-report.md` (ADM-009 fixed; ADM-008 Fix C deferred) |
 
 ---
 
@@ -573,8 +613,19 @@ Each item appears **once**. Production-specific checks are in §14 unless listed
 - [ ] Seed `User` records in Prisma for existing Supabase auth users
 - [x] Verify legacy Supabase **P0** tables in new project (`video_comments`, `video_metadata`) — **local dev, 2026-07-03** via `supabase-p0-legacy-review-tables.sql`
 - [x] Apply **P1** `supabase-p1-comment-author-columns.sql` — **local dev, 2026-07-03** (production Supabase still pending)
-- [ ] Verify legacy Supabase **P1** tables (`project_status`, `project_status_details`, `client_invoices`) — see `legacy-supabase-tables-migration-plan.md`
-- [ ] Configure Supabase Storage bucket `client-vault` in new project
+- [x] **Admin HQ client discovery migration (Phase 1)** — `GET /api/media/clients` + `fetchMediaClients()` — **implemented 2026-07-04**
+- [x] **Admin HQ init hang fix** — non-blocking client discovery + `finally` + 10s timeout — **implemented 2026-07-04; pending manual verify on `/admin`**
+- [x] **Admin HQ design restoration (Fix A)** — dark admin background — **implemented 2026-07-04**
+- [x] **Admin HQ comm + loading UX recovery** — embedded comm strip, `clientsLoading`, no full-page spinner — **implemented 2026-07-04; pending manual verify** — `admin-hq-design-regression-report.md`, `admin-hq-initialization-hang-trace.md`
+- [ ] **Admin HQ asset loading fix** — surface errors, gate empty state — report: `admin-hq-asset-loading-trace.md`
+- [ ] Verify legacy Supabase **P1** tables (`project_status`, `project_status_details`, `client_invoices`) — see `legacy-supabase-tables-migration-plan.md` / `supabase-p1-admin-legacy-tables.sql` — **blocks admin phase/billing/brief** (ADM-001)
+- [x] **Operations core Phase 1 — WP1** — Prisma schema + migration — `operations-core-wp1-report.md`
+- [ ] **Operations core Phase 1 — WP2+** — **FROZEN** — resume after UI regression QA — `design-regression-freeze-audit.md`
+- [ ] ~~Configure Supabase Storage bucket `client-vault` for Admin HQ~~ — **superseded** by client discovery migration (bucket not required for admin; legacy routes only)
+- [ ] **Admin dashboard HQ fixes** — P1 SQL first, then client discovery Phase 1 per `admin-client-discovery-migration-plan.md`
+- [ ] **Timeline Sharing — Phase 2+** — implement per `timeline-sharing-production-readiness.md` (collaboration → agency → production); audit complete 2026-07-04
+- [ ] **Timeline Sharing (OTS / Live Editing Share) — Phase 1 manual verify** — two-browser Go Live test per `timeline-sharing-restoration-blueprint.md` §10
+- [x] **GlobalLiveWidget logged-out visitor flow** — logged-out "Talk to Rendorax" CTA opens existing `ContactForm` in a new `ContactModal` shell instead of redirecting to `/access`; `/access` login flow unchanged; dashboard live session (logged-in) unchanged — **implemented 2026-07-05; pending manual verify**
 
 ### Medium priority
 
@@ -584,6 +635,7 @@ Each item appears **once**. Production-specific checks are in §14 unless listed
 - [ ] Add backend deployment config (Dockerfile or platform.toml)
 - [ ] Update `.env.example` files with missing vars (`RESEND_API_KEY`, `NEXT_PUBLIC_R2_PUBLIC_URL`, Supabase V2 keys)
 - [ ] Migrate admin page from direct Supabase tables to Prisma agency models (optional, long-term)
+- [ ] **Timeline Sharing (OTS / Live Editing Share) — Phase 1** — unified `getReviewRoomId()` join contract; `timeline-sharing-restoration-blueprint.md`. **Implemented — pending manual verify (local).** Phase 2: comments in cinema + playhead sync.
 
 ### Low priority / polish
 
@@ -664,6 +716,25 @@ When assisting with this project, keep these constraints in mind:
 
 | Date | Decision | Rationale |
 |------|----------|-----------|
+| 2026-07-04 | Admin HQ comm + loading UX recovery | Embedded `GlobalLiveWidget` + `ChatbotWidget` on admin; duplicate float suppressed; `clientsLoading` sidebar; spinner removed; build passing |
+| 2026-07-04 | Admin HQ design restoration Fix A+B | `bg-bg-body` on admin loading + main; initial widget hide superseded by comm recovery |
+| 2026-07-04 | Admin HQ design regression inspected | White canvas root cause documented; `admin-hq-design-regression-report.md` |
+| 2026-07-04 | Admin HQ asset loading inspected | Silent error masking on `fetchMediaAssets`; `admin-hq-asset-loading-trace.md` |
+| 2026-07-04 | Admin HQ init hang fix implemented | Non-blocking `fetchClientFolders`, `finally setLoading(false)`, 10s timeout; `admin-hq-initialization-hang-trace.md`; pending manual verify |
+| 2026-07-04 | Admin HQ client discovery Phase 1 implemented | `GET /api/media/clients`, `fetchMediaClients()`, admin sidebar |
+| 2026-07-04 | Admin HQ client discovery migration planned | Superseded by Phase 1 implementation same day |
+| 2026-07-04 | Admin storage architecture review | `client-vault` legacy for admin; R2 + Prisma canonical; `admin-storage-architecture-review.md` |
+| 2026-07-04 | Admin dashboard QA inspection — issue map before fixes | `admin-dashboard-qa-issue-map.md`; auth resolved; P1 tables + legacy storage drift; preserve single-page admin structure |
+| 2026-07-04 | Admin account provisioned via Supabase Dashboard | `admin-studio@kachnamedia.com` + `app_metadata.role`; guides: `admin-account-setup-guide.md`, `admin-login-failure-trace.md` |
+| 2026-07-04 | Design/UI regression freeze | Feature work frozen; recovery plan + QA gate — `design-regression-freeze-audit.md` |
+| 2026-07-04 | Operations core WP1 | `agencyProjectId` + brief columns; migration `20260704161500_ops_core_phase1`; `operations-core-wp1-report.md` |
+| 2026-07-04 | Operations core WP0 pre-flight | P1 tables live; conditional GO for WP1; `operations-core-phase1-preflight.md` |
+| 2026-07-04 | Operations core Phase 1 blueprint approved | OC-P1-01–07 locked; implementation plan: `operations-core-phase1-implementation-plan.md` |
+| 2026-07-04 | Operations core Phase 1 blueprint | Canonical SoT: `AgencyProject`; ERD + migration strategy; `operations-core-phase1-blueprint.md` |
+| 2026-07-04 | Operations core gap analysis | Client/project/team/assignment/feedback/status gaps; Phase 1–3 roadmap; `operations-core-gap-analysis.md` |
+| 2026-07-04 | Timeline Sharing production readiness audit | Phase 2–4 roadmap; blockers TS-C01–C06; `timeline-sharing-production-readiness.md` |
+| 2026-07-04 | Timeline Sharing Phase 1 — unified review room helper | `utils/reviewRoom.ts`; `getReviewRoomId()` for join/share/sync; pending two-browser verify; blueprint: `timeline-sharing-restoration-blueprint.md` |
+| 2026-07-05 | GlobalLiveWidget logged-out visitor flow implemented | Logged-out CTA relabeled "Talk to Rendorax", opens new `ContactModal` wrapping existing `ContactForm` (unchanged fields/backend); no new form, no auth changes, `/access` untouched; logged-in dashboard/admin live session paths untouched; `npm run build` passing; pending manual verify |
 | 2026-07-03 | Premiere XML marker export manually verified local | xmeml import in Premiere; sequence markers; author + comment; CSV/JSON preserved; production §14 |
 | 2026-07-04 | Premiere XML marker export Phase 2a implemented | `buildMarkersXmeml()`; Export Markers adds .xml; superseded by manual verify |
 | 2026-07-03 | Premiere Pro XML marker export — inspection plan (xmeml Phase 2) | `premiere-xml-marker-export-plan.md`; superseded by Phase 2a implementation |
