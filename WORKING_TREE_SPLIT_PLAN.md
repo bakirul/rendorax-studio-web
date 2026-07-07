@@ -213,82 +213,144 @@
 
 **Recommended action:** Inspect both files. If `_tmp-keys.mjs` contains secrets, add to `.gitignore` and do not commit. If `create-admin.ts` is a clean utility script, it can be added to Group A or Group E.
 
+**Resolution (2026-07-05):** Secret inspection completed. `create-admin.ts` sanitized (hardcoded credentials replaced with env vars / CLI args). `_tmp-keys.mjs` deleted from working tree. `.gitignore` updated to ignore `scripts/_tmp-*.{mjs,ts,js}`. `create-admin.ts` committed with Group E (backend `.gitignore` change). `_tmp-keys.mjs` no longer exists. **Group F is resolved.**
+
+---
+
+### Group G — Global Language Selector Extraction (Planned / Not Implemented)
+
+**Status:** Planned — not yet implemented, not in working tree  
+**Source:** `GLOBAL_LANGUAGE_COMMUNICATION_AUDIT.md` (2026-07-05)
+
+**Purpose:** Extract the language selector from `DashboardHeader.tsx` into a reusable component and render it on `/admin` and wherever live communication tools appear, so users outside `/dashboard` can select their preferred language for real-time translation.
+
+**Problem:** The translation engine (3 pathways: OpenAI Realtime audio, Gemini speech-to-text, Gemini chat text) is global — it runs wherever `LiveSessionWidget` renders, including admin and all authenticated pages. However, the language selector (`<select>` with 20 languages) is hardcoded inside `DashboardHeader.tsx`, which only renders on `/dashboard`. Without the selector, `useGlobalStore().selectedLanguage` stays at the default `"en-US"` on all other pages, effectively locking translation to English outside the dashboard.
+
+**This is a pre-existing architectural limitation, not caused by any Group B/C/D change.**
+
+**Planned files (4):**
+
+| File | Status | Planned Change |
+|------|--------|----------------|
+| `rendorax-frontend/components/LanguageSelector.tsx` | New | Extracted `LANGUAGES` array + `<select>` from `DashboardHeader.tsx`. Standalone component reading/writing `useGlobalStore().selectedLanguage` |
+| `rendorax-frontend/components/DashboardHeader.tsx` | Modified | Replace inline `LANGUAGES` array + `<select>` with `<LanguageSelector />` import. Drop-in replacement, zero behavior change |
+| `rendorax-frontend/app/admin/page.tsx` | Modified | Render `<LanguageSelector />` in Admin HQ header row (beside existing admin tools) |
+| `rendorax-frontend/components/dashboard/LiveSessionToolbar.tsx` | Modified (optional) | Render `<LanguageSelector compact />` inside toolbar for global coverage on non-dashboard pages |
+
+**Risk level:** Low (additive, pure refactor + new render points)  
+**Safe to commit:** N/A — no code exists yet  
+**Manual verification required:** Yes — verify language selector appears and functions on `/admin`; verify dashboard behavior unchanged  
+**Blocks on:** Group B committed (admin page must be committed before modifying it further)
+
+**What this group does NOT do:**
+- Does not add translation features for logged-out visitors (by design — visitors use the contact form)
+- Does not persist `selectedLanguage` across sessions (localStorage/cookie — separate scope)
+- Does not auto-detect browser language (separate decision)
+- Does not duplicate the `LANGUAGES` array (extraction eliminates the only copy)
+
+**Recommended commit message (when implemented):** `Extract global language selector from DashboardHeader; add to Admin HQ and LiveSessionToolbar`
+
 ---
 
 ### Group/File Cross-Reference Matrix
 
-| File | Group A (Docs) | Group B (Admin) | Group C (Visitor) | Group D (Timeline) | Group E (Ops) | Group F (Hold) |
-|------|:-:|:-:|:-:|:-:|:-:|:-:|
-| `AI_TEAM_PROTOCOL.md` | **A** | | | | | |
-| `MODEL_SELECTION_MATRIX.md` | **A** | | | | | |
-| `ADMIN_HQ_CURRENT_STATE.md` | **A** | | | | | |
-| `GIT_DESIGN_STATE_VERIFICATION.md` | **A** | | | | | |
-| `BRANCH_DAMAGE_TIMELINE_AUDIT.md` | **A** | | | | | |
-| `admin-*.md` (7 files) | **A** | | | | | |
-| `design-regression-freeze-audit.md` | **A** | | | | | |
-| `operations-core-*.md` (4 files) | **A** | | | | | |
-| `supabase-p1-admin-legacy-tables.sql` | **A** | | | | | |
-| `rendorax-project-checklist.md` | **A** | | | | | |
-| `app/admin/page.tsx` | | **B** | | | | |
-| `media.routes.ts` | | **B** | | | | |
-| `utils/mediaAssets.ts` | | **B** | | | | |
-| `ChatbotWidget.tsx` | | **B** | | | | |
-| `GlobalLiveWidget.tsx` | | **B** + C | | | | |
-| `contact/ContactModal.tsx` | | | **C** | | | |
-| `utils/reviewRoom.ts` | | | | **D** | | |
-| `app/dashboard/page.tsx` | | | | **D** | | |
-| `hooks/useLiveComments.ts` | | | | **D** | | |
-| `timeline-sharing-regression-report.md` | | | | **D** | | |
-| `timeline-sharing-production-readiness.md` | **A** | | | | | |
-| `timeline-sharing-restoration-blueprint.md` | **A** | | | | | |
-| `prisma/schema.prisma` | | | | | **E** | |
-| `prisma/migrations/...` (2 files) | | | | | **E** | |
-| `scripts/create-admin.ts` | | | | | | **F** |
-| `scripts/_tmp-keys.mjs` | | | | | | **F** |
+| File | A (Docs) | B (Admin) | C (Visitor) | D (Timeline) | E (Ops) | F (Hold) | G (Language — Planned) |
+|------|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| `AI_TEAM_PROTOCOL.md` | **A** | | | | | | |
+| `MODEL_SELECTION_MATRIX.md` | **A** | | | | | | |
+| `ADMIN_HQ_CURRENT_STATE.md` | **A** | | | | | | |
+| `GIT_DESIGN_STATE_VERIFICATION.md` | **A** | | | | | | |
+| `BRANCH_DAMAGE_TIMELINE_AUDIT.md` | **A** | | | | | | |
+| `admin-*.md` (7 files) | **A** | | | | | | |
+| `design-regression-freeze-audit.md` | **A** | | | | | | |
+| `operations-core-*.md` (4 files) | **A** | | | | | | |
+| `supabase-p1-admin-legacy-tables.sql` | **A** | | | | | | |
+| `rendorax-project-checklist.md` | **A** | | | | | | |
+| `app/admin/page.tsx` | | **B** | | | | | **G** |
+| `media.routes.ts` | | **B** | | | | | |
+| `utils/mediaAssets.ts` | | **B** | | | | | |
+| `ChatbotWidget.tsx` | | **B** | | | | | |
+| `GlobalLiveWidget.tsx` | | **B** + C | | | | | |
+| `contact/ContactModal.tsx` | | | **C** | | | | |
+| `utils/reviewRoom.ts` | | | | **D** | | | |
+| `app/dashboard/page.tsx` | | | | **D** | | | |
+| `hooks/useLiveComments.ts` | | | | **D** | | | |
+| `timeline-sharing-regression-report.md` | | | | **D** | | | |
+| `timeline-sharing-production-readiness.md` | **A** | | | | | | |
+| `timeline-sharing-restoration-blueprint.md` | **A** | | | | | | |
+| `prisma/schema.prisma` | | | | | **E** | | |
+| `prisma/migrations/...` (2 files) | | | | | **E** | | |
+| `scripts/create-admin.ts` | | | | | | **F** ✅ | |
+| `scripts/_tmp-keys.mjs` | | | | | | **F** ✅ | |
+| `components/LanguageSelector.tsx` | | | | | | | **G** (new) |
+| `components/DashboardHeader.tsx` | | | | | | | **G** |
+| `dashboard/LiveSessionToolbar.tsx` | | | | | | | **G** (optional) |
 
 ---
 
 ## Recommended Commit Order
 
-| Order | Group | Commit Message | Files | Risk | Depends On |
-|-------|-------|----------------|-------|------|------------|
-| **1** | **A** | `Add inspection reports, governance docs, and admin/ops documentation (2026-07-04–05)` | 22 files (all `.md` + `.sql` docs) | None | Nothing |
-| **2** | **E** | `Operations Core WP1: Prisma schema + migration for agencyProjectId and project brief fields` | 3 files (`schema.prisma`, migration SQL, lock) | Medium-High | Nothing (resolves DB/Git mismatch) |
-| **3** | **B** | `Admin HQ recovery: dark background, Phase 1 client discovery, init hang fix, embedded comm strip` | 5 files (`admin/page.tsx`, `media.routes.ts`, `mediaAssets.ts`, `ChatbotWidget.tsx`, `GlobalLiveWidget.tsx`) | Medium | Group E committed (schema defines `MediaAsset` model used by `media.routes.ts`) |
-| **4** | **C** | `Add ContactModal shell for visitor lead capture from GlobalLiveWidget` | 1 file (`ContactModal.tsx`) | Low | Group B committed (GlobalLiveWidget imports ContactModal) |
-| **5** | **D** | `Timeline sharing Phase 1: unified review room ID contract and join helper` | 4 files (`reviewRoom.ts`, `dashboard/page.tsx`, `useLiveComments.ts`, `timeline-sharing-regression-report.md`) | Medium | Nothing (independent of Groups B/C/E) |
-| **6** | **F** | *Do not commit* — inspect first, then decide | 2 files (`create-admin.ts`, `_tmp-keys.mjs`) | Unknown | Operator inspection |
+| Order | Group | Status | Commit Message | Files | Risk | Depends On |
+|-------|-------|--------|----------------|-------|------|------------|
+| **1** | **A** | ✅ Committed `53c1f85` | `Document admin operations and timeline recovery audits` | 22 files (all `.md` + `.sql` docs) | None | Nothing |
+| **2** | **E** | ✅ Committed `fd2b3e3` | `Add operations core WP1 schema migration` | 3 files (`schema.prisma`, migration SQL, lock) + backend `.gitignore` | Medium-High | Nothing |
+| **3** | **B** | ⏸️ HOLD — pending manual browser verification | `Admin HQ recovery: dark background, Phase 1 client discovery, init hang fix, embedded comm strip` | 5 files (`admin/page.tsx`, `media.routes.ts`, `mediaAssets.ts`, `ChatbotWidget.tsx`, `GlobalLiveWidget.tsx`) | Medium | Group E ✅ |
+| **4** | **C** | ⏸️ Pending manual verify (modal opens, form submits, close methods) | `Add ContactModal shell for visitor lead capture from GlobalLiveWidget` | 1 file (`ContactModal.tsx`) | Low | Group B committed first |
+| **5** | **D** | ⏸️ Pending two-browser Go Live test | `Timeline sharing Phase 1: unified review room ID contract and join helper` | 4 files (`reviewRoom.ts`, `dashboard/page.tsx`, `useLiveComments.ts`, `timeline-sharing-regression-report.md`) | Medium | Nothing (independent) |
+| **6** | **F** | ✅ Resolved — sanitized + deleted + `.gitignore` updated | N/A — no standalone commit needed | 0 files remaining | Resolved | N/A |
+| **7** | **G** | 📋 Planned — not yet implemented | `Extract global language selector from DashboardHeader; add to Admin HQ and LiveSessionToolbar` | ~4 files (`LanguageSelector.tsx`, `DashboardHeader.tsx`, `admin/page.tsx`, `LiveSessionToolbar.tsx`) | Low | Group B committed first |
 
 ### Why this order
 
-1. **Group A first** because docs have zero risk, zero runtime impact, and clear the noise so subsequent commits are application-code-only.
-2. **Group E second** because the Prisma schema is already applied to the database. Committing aligns Git with the live DB. If this is committed after Group B, there's a window where `media.routes.ts` references `MediaAsset` fields that the committed schema doesn't describe. Harmless at runtime (Prisma Client is already generated) but Git-inaccurate.
-3. **Group B third** because it's the largest, most interconnected application change. Depends on schema being committed (Group E) so that `media.routes.ts` changes are consistent with the schema in the same commit history.
-4. **Group C fourth** because `ContactModal.tsx` is imported by `GlobalLiveWidget.tsx` (committed in Group B). The import already exists in the committed code after Group B — this commit adds the file that satisfies it.
-5. **Group D fifth** because it is fully independent of all other groups. Could be committed in any position from 2nd onward. Placing it last keeps the admin-focused commits together.
-6. **Group F last (or never)** because these files need human inspection for secrets before any commit decision.
+1. **Group A first** ✅ — docs have zero risk, zero runtime impact, cleared the noise for application commits.
+2. **Group E second** ✅ — Prisma schema already applied to DB. Committing aligned Git with the live database.
+3. **Group B third** ⏸️ — largest, most interconnected application change. Depends on Group E (committed). **Blocked on operator manual browser verification:** `/admin` dark background, client sidebar, embedded widgets, asset loading. See `ADMIN_HQ_GROUP_B_VERIFY.md` for the 10-item checklist.
+4. **Group C fourth** ⏸️ — `ContactModal.tsx` is imported by `GlobalLiveWidget.tsx` (committed in Group B). Cannot be committed until Group B is committed first. Also requires manual modal verification.
+5. **Group D fifth** ⏸️ — fully independent of Groups B/C. Could be committed in any position from 3rd onward. Requires two-browser Go Live test per `timeline-sharing-restoration-blueprint.md` §10.
+6. **Group F resolved** ✅ — `create-admin.ts` sanitized (env vars + CLI args). `_tmp-keys.mjs` deleted. `.gitignore` rule added. Changes absorbed into Group E commit.
+7. **Group G last** 📋 — purely additive future work. No files exist in working tree yet. Cannot begin until Group B is committed (modifies `admin/page.tsx`). Does not block any other group.
 
-### Alternative order (if operator prefers E after B)
+### Hard constraints
 
-Groups D, E, and the A→B→C sequence are internally independent. The only hard constraint is:
-- **A before everything** (noise reduction)
-- **B before C** (ContactModal.tsx depends on GlobalLiveWidget importing it)
-- **F last** (needs inspection)
+- **B before C** — `ContactModal.tsx` depends on `GlobalLiveWidget.tsx` importing it (committed in B)
+- **B before G** — Group G modifies `admin/page.tsx` which must be committed in B first
+- **D independent** — can be committed at any position from 3rd onward
+- **G last** — planned future work, no code exists yet
 
-Groups D and E can be inserted anywhere after A without breaking dependencies.
+### Current blockers
+
+| Group | Blocker | Action Required |
+|-------|---------|-----------------|
+| B | Manual browser verification not yet completed | Operator tests `/admin` in real browser (10-item checklist in `ADMIN_HQ_GROUP_B_VERIFY.md`) |
+| C | Depends on B + own manual verify | Operator tests contact modal (open, submit, Esc/backdrop/X close) |
+| D | Two-browser Go Live test not yet completed | Operator runs two-browser screen share test |
+| G | Not yet implemented | Operator approves scope, then implementation can begin |
 
 ---
 
 ## Pre-Commit Checklist (per group)
 
-| Group | Pre-commit check |
-|-------|------------------|
-| A | Skim docs for accidentally pasted secrets or credentials → none expected |
-| B | `npm run build` passes after staging Group B files → already confirmed 2026-07-05 |
-| C | `npm run build` passes with ContactModal + Group B → already confirmed 2026-07-05 |
-| D | `npm run build` passes with reviewRoom + dashboard + useLiveComments → must verify |
-| E | `npx prisma generate && npx tsc` in backend → already confirmed 2026-07-04 |
-| F | Inspect `_tmp-keys.mjs` for secrets; inspect `create-admin.ts` for hardcoded credentials |
+| Group | Pre-commit check | Status |
+|-------|------------------|--------|
+| A | Skim docs for accidentally pasted secrets or credentials → none expected | ✅ Committed |
+| E | `npx prisma generate && npx tsc` in backend → already confirmed 2026-07-04 | ✅ Committed |
+| B | `npm run build` passes after staging Group B files → confirmed 2026-07-05. **Manual browser verify required** (see `ADMIN_HQ_GROUP_B_VERIFY.md`) | ⏸️ Pending verify |
+| C | `npm run build` passes with ContactModal + Group B → confirmed 2026-07-05. **Manual modal verify required** | ⏸️ Pending verify |
+| D | `npm run build` passes with reviewRoom + dashboard + useLiveComments → must verify. **Two-browser Go Live test required** | ⏸️ Pending verify |
+| F | Inspect `_tmp-keys.mjs` for secrets; inspect `create-admin.ts` for hardcoded credentials | ✅ Resolved |
+| G | Extract `LanguageSelector` from `DashboardHeader.tsx`; verify selector renders on `/admin` and `/dashboard` without regression; `npm run build` passes | 📋 Planned |
+
+---
+
+---
+
+## Revision History
+
+| Date | Change |
+|------|--------|
+| 2026-07-05 (initial) | Groups A–F defined. 38 files classified. Commit order established. |
+| 2026-07-05 (post-commit) | Groups A + E committed (`53c1f85`, `fd2b3e3`). Group F resolved (sanitized + deleted). |
+| 2026-07-05 (language audit) | Group G added per `GLOBAL_LANGUAGE_COMMUNICATION_AUDIT.md`. No reclassification of Groups B/C/D — language selector gap is pre-existing, not caused by uncommitted changes. |
 
 ---
 

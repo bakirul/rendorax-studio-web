@@ -1,5 +1,6 @@
 import { Router } from "express";
 import type { Response } from "express";
+import type { Prisma } from "@prisma/client";
 import { PrismaClient } from "@prisma/client";
 import { transcribeMediaToSrt } from "../lib/transcription";
 import { isAllowedClientUploadObjectKey, isAllowedTranscribeFileUrl } from "../lib/storagePolicy";
@@ -25,6 +26,10 @@ router.use(requireAuth);
 
 function isAdminUser(req: AuthenticatedRequest): boolean {
   return req.user?.role === "admin";
+}
+
+function isClientUser(req: AuthenticatedRequest): boolean {
+  return req.user?.role === "client";
 }
 
 function normalizeFolderValue(
@@ -179,7 +184,7 @@ router.post("/assets", async (req: AuthenticatedRequest, res: Response) => {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    const { fileName, thumbnailUrl, mimeType, folder, fileSize, objectKey } =
+    const { fileName, thumbnailUrl, mimeType, folder, fileSize, objectKey, agencyProjectId } =
       req.body as {
         fileName?: string;
         publicUrl?: string;
@@ -188,6 +193,7 @@ router.post("/assets", async (req: AuthenticatedRequest, res: Response) => {
         folder?: string | null;
         fileSize?: number;
         objectKey?: string;
+        agencyProjectId?: string | null;
       };
 
     if (!fileName || !mimeType) {
@@ -219,6 +225,17 @@ router.post("/assets", async (req: AuthenticatedRequest, res: Response) => {
         ? Math.min(Math.round(fileSize), MAX_INT32)
         : null;
 
+    let resolvedAgencyProjectId: string | null = null;
+    if (typeof agencyProjectId === "string" && agencyProjectId.trim()) {
+      const project = await prisma.agencyProject.findUnique({
+        where: { id: agencyProjectId.trim() },
+      });
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+      resolvedAgencyProjectId = project.id;
+    }
+
     const asset = await prisma.mediaAsset.create({
       data: {
         fileName,
@@ -229,6 +246,7 @@ router.post("/assets", async (req: AuthenticatedRequest, res: Response) => {
         userId: authenticatedUserId,
         folder: normalizedFolder,
         fileSize: normalizedFileSize,
+        agencyProjectId: resolvedAgencyProjectId,
       },
     });
 
@@ -269,6 +287,41 @@ router.post("/assets", async (req: AuthenticatedRequest, res: Response) => {
   }
 });
 
+router.get("/clients", async (req: AuthenticatedRequest, res: Response) => {
+  const prisma = req.app.locals.prisma as PrismaClient;
+
+  try {
+    if (!req.user?.id) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    if (!isAdminUser(req)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const grouped = await prisma.mediaAsset.groupBy({
+      by: ["userId"],
+      where: { userId: { not: null } },
+      _count: { id: true },
+    });
+
+    const clients = grouped
+      .filter(
+        (row): row is typeof row & { userId: string } => row.userId != null,
+      )
+      .map((row) => ({
+        userId: row.userId,
+        assetCount: row._count.id,
+      }))
+      .sort((a, b) => b.assetCount - a.assetCount);
+
+    return res.json(clients);
+  } catch (error) {
+    console.error("Failed to fetch media clients:", error);
+    return res.status(500).json({ error: "Failed to fetch media clients" });
+  }
+});
+
 router.get("/assets", async (req: AuthenticatedRequest, res: Response) => {
   const prisma = req.app.locals.prisma as PrismaClient;
 
@@ -285,16 +338,33 @@ router.get("/assets", async (req: AuthenticatedRequest, res: Response) => {
         ? folderParam.trim().replace(/^\/+|\/+$/g, "") || null
         : undefined;
 
-    const scopedUserId =
-      isAdminUser(req) && requestedUserId?.trim()
-        ? requestedUserId.trim()
-        : authenticatedUserId;
+    let where: Prisma.MediaAssetWhereInput;
+
+    if (isClientUser(req)) {
+      // Clients only see assets linked to a project where they are the client.
+      // Unlinked assets and assets tied to unrelated/other-client projects are excluded,
+      // regardless of who uploaded them (e.g. an editor's deliverable is visible here).
+      where = {
+        agencyProjectId: { not: null },
+        agencyProject: { clientId: authenticatedUserId },
+      };
+    } else {
+      const scopedUserId =
+        isAdminUser(req) && requestedUserId?.trim()
+          ? requestedUserId.trim()
+          : authenticatedUserId;
+
+      where = {
+        ...(scopedUserId ? { userId: scopedUserId } : {}),
+      };
+    }
+
+    if (normalizedFolder !== undefined) {
+      where.folder = normalizedFolder;
+    }
 
     const assets = await prisma.mediaAsset.findMany({
-      where: {
-        ...(scopedUserId ? { userId: scopedUserId } : {}),
-        ...(normalizedFolder !== undefined ? { folder: normalizedFolder } : {}),
-      },
+      where,
       orderBy: { createdAt: "desc" },
     });
 
@@ -400,9 +470,10 @@ router.patch("/assets/:id", async (req: AuthenticatedRequest, res: Response) => 
       return res.status(access.status).json({ error: access.error });
     }
 
-    const { fileName, folder } = req.body as {
+    const { fileName, folder, agencyProjectId } = req.body as {
       fileName?: string;
       folder?: string | null;
+      agencyProjectId?: string | null;
     };
 
     const normalizedFileName = normalizeFileNameValue(fileName);
@@ -416,8 +487,31 @@ router.patch("/assets/:id", async (req: AuthenticatedRequest, res: Response) => 
       return res.status(400).json({ error: "Invalid folder" });
     }
 
-    if (fileName === undefined && folder === undefined) {
-      return res.status(400).json({ error: "fileName or folder is required" });
+    if (
+      fileName === undefined &&
+      folder === undefined &&
+      agencyProjectId === undefined
+    ) {
+      return res.status(400).json({
+        error: "fileName, folder, or agencyProjectId is required",
+      });
+    }
+
+    let resolvedAgencyProjectId: string | null | undefined = undefined;
+    if (agencyProjectId !== undefined) {
+      if (agencyProjectId === null) {
+        resolvedAgencyProjectId = null;
+      } else if (typeof agencyProjectId === "string" && agencyProjectId.trim()) {
+        const project = await prisma.agencyProject.findUnique({
+          where: { id: agencyProjectId.trim() },
+        });
+        if (!project) {
+          return res.status(404).json({ error: "Project not found" });
+        }
+        resolvedAgencyProjectId = project.id;
+      } else {
+        return res.status(400).json({ error: "Invalid agencyProjectId" });
+      }
     }
 
     const updated = await prisma.mediaAsset.update({
@@ -425,6 +519,9 @@ router.patch("/assets/:id", async (req: AuthenticatedRequest, res: Response) => 
       data: {
         ...(normalizedFileName ? { fileName: normalizedFileName } : {}),
         ...(folder !== undefined ? { folder: normalizedFolder ?? null } : {}),
+        ...(resolvedAgencyProjectId !== undefined
+          ? { agencyProjectId: resolvedAgencyProjectId }
+          : {}),
       },
     });
 

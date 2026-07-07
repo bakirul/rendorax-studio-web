@@ -9,6 +9,10 @@ import {
   type VideoCommentRow,
 } from "@/utils/commentAuthor";
 import {
+  emitJoinReviewRoom,
+  getReviewRoomId,
+} from "@/utils/reviewRoom";
+import {
   buildMarkerRows,
   buildMarkersCsv,
   buildMarkersJson,
@@ -117,11 +121,11 @@ export const useLiveComments = (
   useEffect(() => {
     if (!socket || !user?.id) return;
 
-    const roomToJoin = previewFile?.name || currentFolder || "global-lobby";
+    const roomToJoin = getReviewRoomId(previewFile, currentFolder);
     if (activeRoomRef.current === roomToJoin) return;
 
     const joinRoom = () => {
-      socket.emit("join-video-room", roomToJoin);
+      emitJoinReviewRoom(socket, roomToJoin);
       activeRoomRef.current = roomToJoin;
     };
 
@@ -134,7 +138,7 @@ export const useLiveComments = (
     return () => {
       socket.off("connect", joinRoom);
     };
-  }, [socket, user?.id, previewFile?.name, currentFolder]);
+  }, [socket, user?.id, previewFile?.name, previewFile?.assetId, currentFolder]);
 
   useEffect(() => {
     if (!socket) return;
@@ -179,12 +183,10 @@ export const useLiveComments = (
 
   const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newComment.trim() || !previewFile || !videoRef.current || !user)
-      return;
+    if (!newComment.trim() || !previewFile || !user) return;
     const commentTextToSend = newComment.trim();
     setNewComment("");
-    const currentTime = videoRef.current.currentTime;
-    videoRef.current.pause();
+    const currentTime = videoRef.current?.currentTime ?? 0;
 
     const author = resolveCommentAuthor(user);
 
@@ -207,8 +209,9 @@ export const useLiveComments = (
         [...prev, insertedComment].sort((a, b) => a.time_stamp - b.time_stamp),
       );
       if (socket) {
+        const reviewRoomId = getReviewRoomId(previewFile, currentFolder);
         socket.emit("new-comment", {
-          fileId: previewFile.name,
+          fileId: reviewRoomId,
           ...insertedComment,
         });
       }
@@ -390,9 +393,10 @@ export const useLiveComments = (
     if (videoRef.current) {
       videoRef.current.currentTime = time;
       videoRef.current.play();
-      if (socket && previewFile?.name) {
-        socket.emit("video-seek", { room: previewFile.name, currentTime: time });
-        socket.emit("video-play", { room: previewFile.name, currentTime: time });
+      if (socket) {
+        const reviewRoomId = getReviewRoomId(previewFile, currentFolder);
+        socket.emit("video-seek", { room: reviewRoomId, currentTime: time });
+        socket.emit("video-play", { room: reviewRoomId, currentTime: time });
       }
     }
   };

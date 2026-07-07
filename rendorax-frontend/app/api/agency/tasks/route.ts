@@ -27,3 +27,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
+
+export async function PATCH(request: Request) {
+  try {
+    const { taskId, ...body } = await request.json();
+    if (typeof taskId !== "string" || !taskId.trim()) {
+      return NextResponse.json({ error: "taskId is required" }, { status: 400 });
+    }
+
+    const upstream = await proxyAgencyRequest(`/tasks/${taskId.trim()}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+
+    const payload = await upstream.json().catch(() => ({}));
+    return NextResponse.json(payload, { status: upstream.status });
+  } catch (error) {
+    console.error("Agency task update error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}

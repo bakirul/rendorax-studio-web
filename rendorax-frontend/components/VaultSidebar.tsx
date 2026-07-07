@@ -2,7 +2,6 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import GlobalLiveWidget from "./GlobalLiveWidget";
 
 interface SidebarProps {
   currentFolder: string;
@@ -573,10 +572,6 @@ export default function VaultSidebar({
             </div>
           )}
         </div>
-      </div>
-
-      <div className="shrink-0 border-t border-white/5 bg-[#050505] p-4">
-        <GlobalLiveWidget isEmbedded={true} />
       </div>
     </aside>
   );

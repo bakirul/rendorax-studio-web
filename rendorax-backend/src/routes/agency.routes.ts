@@ -34,6 +34,70 @@ async function requireAgencyUser(req: AuthenticatedRequest, res: Response) {
   }
 }
 
+router.get("/me", async (req: AuthenticatedRequest, res: Response) => {
+  const actor = await requireAgencyUser(req, res);
+  if (!actor) return;
+  res.json(actor);
+});
+
+router.get("/projects", async (req: AuthenticatedRequest, res: Response) => {
+  const actor = await requireAgencyUser(req, res);
+  if (!actor) return;
+
+  const prisma = getPrisma(req);
+  const role = mapSupabaseRoleToAgencyRole(req.user?.role);
+
+  let where: Prisma.AgencyProjectWhereInput;
+  if (role === "admin") {
+    where = {};
+  } else if (role === "client") {
+    where = { clientId: actor.id };
+  } else {
+    where = { ownerId: actor.id };
+  }
+
+  try {
+    const projects = await prisma.agencyProject.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      include: {
+        owner: { select: { id: true, email: true, displayName: true, role: true } },
+        client: { select: { id: true, email: true, displayName: true, role: true } },
+        _count: { select: { tasks: true, assets: true } },
+      },
+    });
+
+    res.json({ projects });
+  } catch (error) {
+    console.error("Failed to fetch projects:", error);
+    res.status(500).json({ error: "Failed to fetch projects" });
+  }
+});
+
+router.get("/users", async (req: AuthenticatedRequest, res: Response) => {
+  const actor = await requireAgencyUser(req, res);
+  if (!actor) return;
+
+  if (!isAdminRole(req.user?.role)) {
+    res.status(403).json({ error: "Admin access required" });
+    return;
+  }
+
+  const prisma = getPrisma(req);
+
+  try {
+    const users = await prisma.user.findMany({
+      select: { id: true, email: true, displayName: true, role: true },
+      orderBy: { email: "asc" },
+    });
+
+    res.json({ users });
+  } catch (error) {
+    console.error("Failed to fetch users:", error);
+    res.status(500).json({ error: "Failed to fetch users" });
+  }
+});
+
 router.post("/projects", async (req: AuthenticatedRequest, res: Response) => {
   const actor = await requireAgencyUser(req, res);
   if (!actor) return;
@@ -213,6 +277,63 @@ router.get("/tasks", async (req: AuthenticatedRequest, res: Response) => {
   } catch (error) {
     console.error("Failed to fetch tasks:", error);
     res.status(500).json({ error: "Failed to fetch tasks" });
+  }
+});
+
+const ALLOWED_TASK_STATUSES = new Set([
+  "todo",
+  "in_progress",
+  "in_review",
+  "done",
+]);
+
+router.patch("/tasks/:id", async (req: AuthenticatedRequest, res: Response) => {
+  const actor = await requireAgencyUser(req, res);
+  if (!actor) return;
+
+  const role = mapSupabaseRoleToAgencyRole(req.user?.role);
+  if (role === "client") {
+    res.status(403).json({ error: "Clients cannot update task status" });
+    return;
+  }
+
+  const taskId = String(req.params.id);
+  const { status } = req.body ?? {};
+
+  if (typeof status !== "string" || !ALLOWED_TASK_STATUSES.has(status)) {
+    res.status(400).json({
+      error: "status must be one of: todo, in_progress, in_review, done",
+    });
+    return;
+  }
+
+  const prisma = getPrisma(req);
+  const task = await prisma.task.findUnique({ where: { id: taskId } });
+
+  if (!task) {
+    res.status(404).json({ error: "Task not found" });
+    return;
+  }
+
+  if (!isAdminRole(req.user?.role) && task.assigneeId !== actor.id) {
+    res.status(403).json({ error: "You can only update tasks assigned to you" });
+    return;
+  }
+
+  try {
+    const updated = await prisma.task.update({
+      where: { id: taskId },
+      data: { status: status as Prisma.TaskUpdateInput["status"] },
+      include: {
+        project: { select: { id: true, title: true, status: true } },
+        assignee: { select: { id: true, email: true, displayName: true, role: true } },
+      },
+    });
+
+    res.json(updated);
+  } catch (error) {
+    console.error("Failed to update task status:", error);
+    res.status(500).json({ error: "Failed to update task status" });
   }
 });
 

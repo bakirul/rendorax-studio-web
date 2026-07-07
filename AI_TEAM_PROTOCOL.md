@@ -6,6 +6,12 @@ This document defines how ChatGPT, Cursor, Gemini, and future AI tools must work
 
 ---
 
+## North Star Alignment
+
+Before any inspection, plan, audit, or implementation, read `PROJECT_NORTH_STAR.md` and confirm the task supports the North Star.
+
+---
+
 ## Golden Rule
 
 Never change anything before inspection.

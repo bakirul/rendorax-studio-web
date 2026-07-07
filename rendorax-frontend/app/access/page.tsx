@@ -33,9 +33,10 @@ export default function AccessPage() {
       setError(error.message);
     } else if (data.user) {
       setMessage("Authentication successful. Initializing vault...");
-      // লগইন সফল হলে ড্যাশবোর্ডে রিডাইরেক্ট করবে
+      const destination =
+        data.user.app_metadata?.role === "admin" ? "/admin" : "/dashboard";
       setTimeout(() => {
-        router.push("/dashboard");
+        router.push(destination);
       }, 1500);
     }
     setLoading(false);

@@ -11,6 +11,7 @@ import { useMediaProcessingPoll } from "@/hooks/useMediaProcessingPoll";
 import { useLiveComments } from "@/hooks/useLiveComments";
 import { useFeatureFlags } from "@/hooks/useFeatureFlags";
 import { useDashboardStore } from "@/store/useDashboardStore";
+import { useGlobalStore } from "@/store/useGlobalStore";
 
 // Components
 import Navbar from "@/components/Navbar";
@@ -44,6 +45,7 @@ import {
   loadPersistedCommentsSidebarWidth,
   persistCommentsSidebarWidth,
 } from "@/utils/commentsSidebarPersistence";
+import { emitJoinReviewRoom, getReviewRoomId } from "@/utils/reviewRoom";
 
 const setMediaBitrate = (sdp: string, bitrate: number) => {
   let lines = sdp.split('\r\n');
@@ -107,6 +109,21 @@ export default function DashboardPage() {
     setProjectStage,
     setViewSettings,
   } = useDashboardStore();
+
+  const setActiveReviewRoomId = useGlobalStore((state) => state.setActiveReviewRoomId);
+
+  // Keep the shared live session (voice/video call) aligned with whatever room
+  // comments, playback sync, and timeline sharing are already using for the
+  // asset currently being reviewed. Overwriting (not clearing-then-setting) on
+  // every change avoids a null flash that would otherwise force an active
+  // call to rejoin. Only reset to null (→ "global-lobby") on unmount.
+  useEffect(() => {
+    setActiveReviewRoomId(getReviewRoomId(previewFile, currentFolder));
+  }, [previewFile, currentFolder, setActiveReviewRoomId]);
+
+  useEffect(() => {
+    return () => setActiveReviewRoomId(null);
+  }, [setActiveReviewRoomId]);
 
   const [commentsSidebarWidth, setCommentsSidebarWidth] = useState(
     COMMENTS_SIDEBAR_DEFAULT_PX,
@@ -238,6 +255,30 @@ export default function DashboardPage() {
   const [integrityHash, setIntegrityHash] = useState<string | null>(null);
   const [isLocking, setIsLocking] = useState(false);
 
+  // Assigned Tasks (Operations Core — Step 4)
+  const [editorTasks, setEditorTasks] = useState<any[]>([]);
+  const [editorTasksLoading, setEditorTasksLoading] = useState(false);
+  const [isTaskPanelExpanded, setIsTaskPanelExpanded] = useState(false);
+  const [taskStatusUpdating, setTaskStatusUpdating] = useState<string | null>(null);
+  const taskStatusLabels: Record<string, string> = {
+    todo: "To Do",
+    in_progress: "In Progress",
+    in_review: "In Review",
+    done: "Done",
+  };
+
+  // Active Project selector (Operations Core — Step 5: link uploads to a project)
+  const [activeProjectId, setActiveProjectId] = useState<string>("");
+  const availableProjects = useMemo(() => {
+    const seen = new Map<string, { id: string; title: string }>();
+    for (const task of editorTasks) {
+      if (task.project?.id && !seen.has(task.project.id)) {
+        seen.set(task.project.id, { id: task.project.id, title: task.project.title });
+      }
+    }
+    return Array.from(seen.values());
+  }, [editorTasks]);
+
   // Refs
   const videoRef = useRef<HTMLVideoElement>(null);
   const compareVideoRef = useRef<HTMLVideoElement>(null);
@@ -352,13 +393,17 @@ export default function DashboardPage() {
         }
       }, 100);
 
-      const globalRoomId = previewFile?.name || currentFolder || "global-lobby";
+      const reviewRoomId = getReviewRoomId(previewFile, currentFolder);
       if (socket) {
-        // Emit explicit socket event to global room to force client UI switch
-        socket.emit("admin-started-timeline-share", { 
-          roomId: globalRoomId,
-          editorSocketId: socket.id 
+        emitJoinReviewRoom(socket, reviewRoomId);
+        socket.emit("admin-started-timeline-share", {
+          roomId: reviewRoomId,
+          editorSocketId: socket.id,
         });
+      } else {
+        console.warn(
+          "Timeline share started locally but socket is unavailable — viewers will not receive cinema mode.",
+        );
       }
 
       stream.getVideoTracks()[0].onended = () => {
@@ -380,9 +425,10 @@ export default function DashboardPage() {
     setIsScreenSharing(false);
     setIsLiveStreaming(false);
 
-    const globalRoomId = previewFile?.name || currentFolder || "global-lobby";
+    const reviewRoomId = getReviewRoomId(previewFile, currentFolder);
     if (socket) {
-      socket.emit("admin-stopped-timeline-share", { roomId: globalRoomId });
+      emitJoinReviewRoom(socket, reviewRoomId);
+      socket.emit("admin-stopped-timeline-share", { roomId: reviewRoomId });
     }
   };
 
@@ -391,10 +437,14 @@ export default function DashboardPage() {
     if (!socket) return;
 
     const handleAdminStartedShare = (data: { roomId: string; editorSocketId: string }) => {
+      if (data.editorSocketId === socket.id) return;
+      const activeRoomId = getReviewRoomId(previewFile, currentFolder);
+      if (data.roomId !== activeRoomId) return;
       setIsLiveStreaming(true);
+      emitJoinReviewRoom(socket, data.roomId);
       socket.emit("timeline-client-ready", {
         targetSocketId: data.editorSocketId,
-        roomId: `timeline-${data.roomId}`,
+        roomId: data.roomId,
       });
     };
 
@@ -541,7 +591,7 @@ export default function DashboardPage() {
       socket.off("timeline-webrtc-answer", handleScreenAnswer);
       socket.off("timeline-user-disconnected", handleUserDisconnected);
     };
-  }, [socket]);
+  }, [socket, previewFile?.assetId, previewFile?.name, currentFolder]);
 
   useEffect(() => {
     return () => {
@@ -572,6 +622,40 @@ export default function DashboardPage() {
     setIsSidebarOpen(window.innerWidth >= 768);
   }, [setIsSidebarOpen]);
 
+  const loadEditorTasks = useCallback(async () => {
+    setEditorTasksLoading(true);
+    try {
+      const res = await fetch("/api/agency/tasks");
+      const data = await res.json();
+      if (data.tasks) setEditorTasks(data.tasks);
+    } catch {
+      console.error("Failed to load assigned tasks");
+    } finally {
+      setEditorTasksLoading(false);
+    }
+  }, []);
+
+  const updateTaskStatus = useCallback(async (taskId: string, status: string) => {
+    setTaskStatusUpdating(taskId);
+    try {
+      const res = await fetch("/api/agency/tasks", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskId, status }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setEditorTasks((prev) =>
+          prev.map((t) => (t.id === taskId ? { ...t, ...updated } : t)),
+        );
+      }
+    } catch {
+      console.error("Failed to update task status");
+    } finally {
+      setTaskStatusUpdating(null);
+    }
+  }, []);
+
   // User Auth Initializer & Strict RBAC
   useEffect(() => {
     let isMounted = true;
@@ -586,6 +670,10 @@ export default function DashboardPage() {
             session.user.app_metadata?.role === "admin" ||
             session.user.app_metadata?.role === "editor";
           setIsEditor(editorCheck);
+          fetch("/api/agency/me").catch(() => {});
+          if (editorCheck) {
+            void loadEditorTasks();
+          }
         }
         setLoading(false);
       }
@@ -594,7 +682,7 @@ export default function DashboardPage() {
     return () => {
       isMounted = false;
     };
-  }, [supabase, setIsEditor]);
+  }, [supabase, setIsEditor, loadEditorTasks]);
 
   // Sync main and compare video elements
   const handleTogglePlay = useCallback(() => {
@@ -989,6 +1077,7 @@ export default function DashboardPage() {
         userId: user.id,
         folder: mediaFolderForSave(currentFolder),
         fileSize: file.size,
+        agencyProjectId: isEditor && activeProjectId ? activeProjectId : undefined,
       });
 
       setActiveBin("cloud");
@@ -998,7 +1087,15 @@ export default function DashboardPage() {
 
       return savedAsset;
     },
-    [user, currentFolder, setActiveBin, fetchAllFolders, fetchAndSetCloudAssets],
+    [
+      user,
+      currentFolder,
+      setActiveBin,
+      fetchAllFolders,
+      fetchAndSetCloudAssets,
+      isEditor,
+      activeProjectId,
+    ],
   );
 
   const handleHeaderUpload = useCallback(
@@ -1228,14 +1325,187 @@ export default function DashboardPage() {
         onR2UploadSuccess={handleR2UploadSuccess}
       />
 
+      <div className="shrink-0 bg-[#0a0a0f] border-b border-white/5 px-6 py-2 flex items-center gap-3 flex-wrap">
+        <span className="text-xs font-semibold text-white tracking-wide">
+          {isEditor ? "Production Workspace" : "Review Workspace"}
+        </span>
+        <span
+          className={`text-[9px] uppercase tracking-widest font-bold px-2 py-0.5 rounded-full border shrink-0 ${
+            isEditor
+              ? "border-[#d4af37]/40 bg-[#d4af37]/10 text-[#d4af37]"
+              : "border-blue-400/40 bg-blue-400/10 text-blue-300"
+          }`}
+        >
+          {isEditor ? "Editor / Team" : "Client"}
+        </span>
+        <span className="text-[10px] text-gray-500 hidden sm:inline truncate">
+          {isEditor
+            ? "Assigned tasks, active project, live editing, uploads, review tools"
+            : "Preview assets, give feedback, join live review, approve or request revision"}
+        </span>
+      </div>
 
+      {isEditor && (
+        <div className="shrink-0 bg-[#0a0a0f] border-b border-white/5 relative z-10">
+          <div className="w-full flex items-center justify-between px-6 py-2 gap-4">
+            <button
+              onClick={() => setIsTaskPanelExpanded((prev) => !prev)}
+              className="flex items-center gap-3 text-left hover:opacity-80 transition-opacity min-w-0"
+            >
+              <span className="text-[10px] uppercase tracking-widest text-[#d4af37] shrink-0">
+                My Tasks
+              </span>
+              <span className="text-[10px] text-gray-500 shrink-0">
+                {editorTasksLoading
+                  ? "Loading..."
+                  : `${editorTasks.length} assigned`}
+              </span>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={`text-gray-500 transition-transform shrink-0 ${isTaskPanelExpanded ? "rotate-180" : ""}`}
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+
+            {availableProjects.length > 0 && (
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[9px] uppercase tracking-widest text-gray-500 hidden sm:inline">
+                  Active Project
+                </span>
+                <select
+                  value={activeProjectId}
+                  onChange={(e) => setActiveProjectId(e.target.value)}
+                  className="bg-[#121217] text-[#d4af37] text-[10px] px-2 py-1 border border-white/10 outline-none cursor-pointer max-w-[160px] truncate"
+                  title="Uploads will be linked to this project"
+                >
+                  <option value="">No project (unlinked)</option>
+                  {availableProjects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+
+          {isTaskPanelExpanded && (
+            <div className="px-6 pb-4 max-h-[240px] overflow-y-auto custom-scrollbar">
+              {editorTasksLoading ? (
+                <p className="text-center py-4 text-[#d4af37] text-[10px] uppercase tracking-widest">
+                  Loading tasks...
+                </p>
+              ) : editorTasks.length === 0 ? (
+                <p className="text-center py-4 text-gray-500 text-xs italic">
+                  No tasks assigned to you yet.
+                </p>
+              ) : (
+                <ul className="space-y-2">
+                  {editorTasks.map((task: any) => (
+                    <li
+                      key={task.id}
+                      className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-3 border border-white/5 bg-[#121217] gap-2"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-gray-200 text-xs font-medium truncate">
+                          {task.title}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+                          {task.project && (
+                            <span className="text-[9px] uppercase tracking-widest text-gray-500">
+                              {task.project.title}
+                            </span>
+                          )}
+                          {task.assignee && (
+                            <span className="text-[9px] uppercase tracking-widest text-gray-500">
+                              {task.assignee.displayName || task.assignee.email}
+                            </span>
+                          )}
+                          {task.dueDate && (
+                            <span className="text-[9px] uppercase tracking-widest text-gray-500">
+                              Due {new Date(task.dueDate).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <select
+                          value={task.status}
+                          disabled={taskStatusUpdating === task.id}
+                          onChange={(e) => updateTaskStatus(task.id, e.target.value)}
+                          className={`text-[9px] uppercase tracking-widest px-2 py-1 border outline-none font-bold cursor-pointer disabled:opacity-50 ${
+                            task.status === "done"
+                              ? "border-green-500/30 bg-green-500/10 text-green-400"
+                              : task.status === "in_review"
+                                ? "border-blue-500/30 bg-blue-500/10 text-blue-400"
+                                : task.status === "in_progress"
+                                  ? "border-[#d4af37]/30 bg-[#d4af37]/10 text-[#d4af37]"
+                                  : "border-white/10 bg-white/5 text-gray-400"
+                          }`}
+                        >
+                          {Object.keys(taskStatusLabels).map((s) => (
+                            <option key={s} value={s}>
+                              {taskStatusLabels[s]}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <div
         id="main-workspace-container"
         className="flex flex-col md:flex-row flex-1 overflow-hidden relative min-h-0 w-full"
       >
         {isLiveStreaming ? (
-          <TimelineShareWidget cinemaVideoRef={cinemaVideoRef} socket={socket} isEditor={isEditor} />
+          <div className="flex flex-col lg:flex-row flex-1 overflow-hidden relative w-full min-h-0">
+            <TimelineShareWidget cinemaVideoRef={cinemaVideoRef} socket={socket} isEditor={isEditor} />
+
+            <div
+              className="relative flex max-md:min-h-[300px] md:min-h-[500px] flex-shrink-0 flex-col border-t border-white/5 bg-[#121217] w-full lg:h-full lg:min-h-0 lg:w-[var(--comments-sidebar-w)] lg:border-l lg:border-t-0 z-40"
+              style={{
+                ["--comments-sidebar-w" as string]: `${commentsSidebarWidth}px`,
+                flexShrink: 0,
+              }}
+            >
+              <div
+                onMouseDown={startResizingCommentsSidebar}
+                className="absolute left-0 top-0 bottom-0 z-50 hidden w-1 cursor-col-resize hover:bg-[#d4af37]/40 lg:block"
+              />
+              <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col min-h-0">
+                <CommentsPanel
+                  disabled={false}
+                  isLive={isLive}
+                  playbackUrl={previewPlaybackUrl}
+                  comments={comments}
+                  newComment={newComment}
+                  setNewComment={setNewComment}
+                  handleAddComment={handleAddComment}
+                  handleEditComment={handleEditComment}
+                  handleDeleteComment={handleDeleteComment}
+                  handleNotifyTeam={handleNotifyTeam}
+                  isNotifying={isNotifying}
+                  notificationSent={notificationSent}
+                  jumpToTime={jumpToTime}
+                />
+              </div>
+            </div>
+          </div>
         ) : (
           <>
             {isSidebarOpen && (

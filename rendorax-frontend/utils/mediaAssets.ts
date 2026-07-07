@@ -29,6 +29,7 @@ export interface MediaAssetRecord {
     | null;
   proxyVersion?: number | null;
   playbackUrl?: string | null;
+  agencyProjectId?: string | null;
 }
 
 export interface SaveMediaAssetInput {
@@ -39,12 +40,18 @@ export interface SaveMediaAssetInput {
   userId?: string;
   folder?: string | null;
   fileSize?: number;
+  agencyProjectId?: string | null;
 }
 
 export interface FetchMediaAssetsParams {
   userId?: string;
   /** Pass "" for vault root (assets with null folder). Omit only when intentionally fetching all. */
   folder?: string;
+}
+
+export interface MediaClientRecord {
+  userId: string;
+  assetCount: number;
 }
 
 /** Normalizes sidebar folder paths (e.g. "shared/Day_01/") to DB keys ("shared/Day_01"). */
@@ -378,6 +385,22 @@ export async function fetchR2StorageList(
   return data.objects.map(mapR2ObjectToMediaAsset);
 }
 
+/** Admin HQ: distinct clients with media assets (R2 + Prisma). */
+export async function fetchMediaClients(): Promise<MediaClientRecord[]> {
+  const headers = await getBackendAuthHeaders();
+  const res = await backendFetch("/api/media/clients", { headers });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(
+      (body as { error?: string }).error ||
+        `Failed to fetch media clients (${res.status})`,
+    );
+  }
+
+  return res.json();
+}
+
 export async function fetchMediaAssets(
   params?: FetchMediaAssetsParams,
 ): Promise<MediaAssetRecord[]> {
@@ -430,6 +453,7 @@ export async function saveMediaAsset(
 export interface UpdateMediaAssetInput {
   fileName?: string;
   folder?: string | null;
+  agencyProjectId?: string | null;
 }
 
 export async function updateMediaAsset(

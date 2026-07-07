@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { useGlobalStore } from "@/store/useGlobalStore";
 import { resolveChatLanguage } from "@/utils/languageCodes";
 
@@ -19,7 +20,13 @@ const AI_WELCOME_MESSAGE: AiMessage = {
   langUsed: "en",
 };
 
-export default function ChatbotWidget() {
+export default function ChatbotWidget({
+  isEmbedded = false,
+}: {
+  isEmbedded?: boolean;
+}) {
+  const pathname = usePathname();
+  const isAdminRoute = pathname?.startsWith("/admin");
   const { selectedLanguage } = useGlobalStore();
   const [hasHydrated, setHasHydrated] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
@@ -160,6 +167,13 @@ export default function ChatbotWidget() {
       return `${base} inset-4 rounded-2xl`;
     }
 
+    if (isEmbedded) {
+      if (isMinimized) {
+        return `${base} top-24 right-6 w-[calc(100vw-2rem)] sm:w-72 max-w-[288px] rounded-t-2xl`;
+      }
+      return `${base} top-24 right-6 w-[calc(100vw-2rem)] sm:w-[450px] max-w-[450px] h-[650px] max-h-[70vh] rounded-2xl`;
+    }
+
     if (isMinimized) {
       return `${base} ${anchorClass} w-[calc(100vw-2rem)] sm:w-72 max-w-[288px] rounded-t-2xl`;
     }
@@ -169,12 +183,19 @@ export default function ChatbotWidget() {
 
   if (!hasHydrated) return null;
 
+  // Admin HQ embeds AI in the header; suppress root layout floating duplicate.
+  if (isAdminRoute && !isEmbedded) return null;
+
+  const launcherClass = isEmbedded
+    ? "p-2.5 bg-black/60 backdrop-blur-md border border-[#d4af37]/30 hover:border-[#d4af37]/60 text-white rounded-full shadow-lg hover:shadow-[0_0_20px_rgba(212,175,55,0.15)] transition-all duration-300 group"
+    : `fixed ${anchorClass} z-50 p-4 bg-black/60 backdrop-blur-md border border-[#d4af37]/30 hover:border-[#d4af37]/60 text-white rounded-full shadow-2xl hover:shadow-[0_0_20px_rgba(212,175,55,0.15)] transition-all duration-300 group`;
+
   return (
     <>
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className={`fixed ${anchorClass} z-50 p-4 bg-black/60 backdrop-blur-md border border-[#d4af37]/30 hover:border-[#d4af37]/60 text-white rounded-full shadow-2xl hover:shadow-[0_0_20px_rgba(212,175,55,0.15)] transition-all duration-300 group`}
+          className={launcherClass}
           aria-label="Open Rendorax AI assistant"
         >
           <div className="flex items-center space-x-2">
@@ -192,7 +213,13 @@ export default function ChatbotWidget() {
                 d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
               />
             </svg>
-            <span className="text-sm font-medium text-white/90 max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-500 ease-in-out whitespace-nowrap">
+            <span
+              className={`text-sm font-medium text-white/90 whitespace-nowrap ${
+                isEmbedded
+                  ? "ml-0"
+                  : "max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-500 ease-in-out"
+              }`}
+            >
               Rendorax AI
             </span>
           </div>

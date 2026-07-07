@@ -1,7 +1,7 @@
 # Timeline Sharing Regression — Inspection Report
 
 **Created:** 2026-07-03  
-**Type:** Inspection only — no code changes  
+**Type:** Inspection + Phase 1 update (2026-07-04)  
 **Branch:** `monorepo-stabilization-2026-07-03`  
 **Related:** `review-collaboration-layer-map.md` §7, `rendorax-backend/match_log.txt`
 
@@ -18,7 +18,7 @@
 | What is missing/broken? | Room coupling, playhead sync not wired from controls, cinema mode **hides comments UI**, no session links, orphan `websocket/server.ts` (port 3001) with **different room naming**, no automated tests (E2E skipped). *(Dashboard scrubber comment markers — **resolved** 2026-07-03; live cinema share unchanged.)* |
 | Safest restoration path | **Phase 1:** fix join-room contract + two-browser local proof without redesign. **Phase 2:** playhead sync + TURN. **Phase 3:** review rooms. *(Scrubber marker UI — done; see `timeline-comment-markers-plan.md`.)* |
 
-**Local status:** **Broken / Partial** — OTS screen-share code present; reliability **not** manually verified 2026-07-03.  
+**Local status:** **Phase 1 stabilized — pending two-browser manual verify (local, 2026-07-04)**. OTS code + unified room helper (`utils/reviewRoom.ts`). See `timeline-sharing-restoration-blueprint.md`.  
 **Dashboard scrubber comment markers:** **Resolved — manually verified (local, 2026-07-03)** — separate from live sharing; see `timeline-comment-markers-plan.md`.  
 **Production status:** **Unknown** — requires backend URL, TURN, and live WebRTC test (§14 checklist).
 
@@ -46,7 +46,7 @@
 
 | Hook | Timeline role |
 |------|----------------|
-| `useLiveComments` | Socket connection + `join-video-room` room = `previewFile?.name \|\| currentFolder \|\| "global-lobby"` |
+| `useLiveComments` | Socket connection + `join-video-room` via `getReviewRoomId(previewFile, currentFolder)` |
 | `useFeatureFlags` | `enable_live_session` exists but **is not referenced** in `page.tsx` for screen share (only compare + picture lock use `flags`) |
 | `useFrameAccurateVideo` | Not used in cinema mode layout |
 
@@ -104,7 +104,7 @@ sequenceDiagram
   Browser->>Browser: getDisplayMedia + getUserMedia (mic)
   Browser->>Browser: setIsLiveStreaming, local preview on cinemaVideoRef
   Browser->>SIO: admin-started-timeline-share { roomId, editorSocketId }
-  Note over SIO: roomId = previewFile.name || currentFolder || global-lobby
+  Note over SIO: roomId = getReviewRoomId() — review:asset:{id} or review:file:{name}
   SIO->>Client: admin-started-timeline-share (if in same Socket room)
   Client->>Client: setIsLiveStreaming → TimelineShareWidget
   Client->>SIO: timeline-client-ready → editorSocketId
@@ -194,7 +194,7 @@ Compare mode lives inside **non-cinema** preview layout. `isLiveStreaming` repla
 
 | Issue | Severity | Evidence |
 |-------|----------|----------|
-| `roomId` = `previewFile?.name \|\| currentFolder \|\| "global-lobby"` | **High** | `startScreenShare` L354; `join-video-room` in `useLiveComments` L100 — **must match exactly** |
+| `roomId` = `getReviewRoomId()` — `review:asset:{assetId}` or `review:file:{normalized}` | **Mitigated Phase 1** | `utils/reviewRoom.ts`; both parties still need same asset context |
 | Client without same asset open | **High** | Client joins `currentFolder` or `global-lobby` if no `previewFile` |
 | Editor excluded from relay | **Expected** | `socket.to(roomId)` — editor relies on local `setIsLiveStreaming` |
 | `timeline-${roomId}` in client-ready payload | **Low** | Backend **ignores** `roomId` on `timeline-client-ready` — cosmetic only |
