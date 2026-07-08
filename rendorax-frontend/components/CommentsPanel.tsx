@@ -5,9 +5,10 @@ import {
   getCommentDisplayName,
   type VideoCommentRow,
 } from "@/utils/commentAuthor";
+import { type DisplayCommentRow } from "@/hooks/useLiveComments";
 
 interface CommentsPanelProps {
-  comments: VideoCommentRow[];
+  comments: DisplayCommentRow[];
   newComment: string;
   setNewComment: (val: string) => void;
   handleAddComment: (e: React.FormEvent) => void;
@@ -92,7 +93,19 @@ export default function CommentsPanel({
                     {Math.floor(comment.time_stamp / 60)}:
                     {("0" + Math.floor(comment.time_stamp % 60)).slice(-2)}
                   </button>
-                  <span className="text-zinc-200">{comment.comment_text}</span>
+                  <span className="text-zinc-200">
+                    {comment.display_text || comment.comment_text}
+                  </span>
+                  {comment.translated && (
+                    <span className="ml-2 text-[9px] uppercase tracking-wide text-zinc-500">
+                      Translated
+                    </span>
+                  )}
+                  {comment.translationFailed && (
+                    <span className="ml-2 text-[9px] uppercase tracking-wide text-zinc-500">
+                      Translation unavailable
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="flex items-center space-x-1 md:opacity-0 group-hover:opacity-100 transition-opacity duration-150">

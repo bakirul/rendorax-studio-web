@@ -8,6 +8,9 @@ import {
   resolveCommentAuthor,
   type VideoCommentRow,
 } from "@/utils/commentAuthor";
+import { resolveSpeechLanguage } from "@/utils/languageCodes";
+import { translateIncomingChatMessage } from "@/utils/translateLiveChatMessage";
+import { useGlobalStore } from "@/store/useGlobalStore";
 import {
   emitJoinReviewRoom,
   getReviewRoomId,
@@ -32,6 +35,25 @@ function formatCompiledNoteLine(comment: VideoCommentRow): string {
   return `[${formatCommentTimecode(comment.time_stamp)}] ${author}: ${comment.comment_text}`;
 }
 
+export type DisplayCommentRow = VideoCommentRow & {
+  display_text?: string;
+  translated?: boolean;
+  translationFailed?: boolean;
+};
+
+type CommentTranslationCacheEntry = {
+  display_text: string;
+  translated: boolean;
+  translationFailed: boolean;
+};
+
+function commentTranslationCacheKey(
+  commentId: string,
+  selectedLanguage: string,
+): string {
+  return `${commentId}:${selectedLanguage}`;
+}
+
 export const useLiveComments = (
   user: any,
   previewFile: any,
@@ -42,13 +64,20 @@ export const useLiveComments = (
   const videoRefStable = useRef(videoRef);
   videoRefStable.current = videoRef;
 
-  const [comments, setComments] = useState<VideoCommentRow[]>([]);
+  const selectedLanguage = useGlobalStore((state) => state.selectedLanguage);
+  const [comments, setComments] = useState<DisplayCommentRow[]>([]);
   const [newComment, setNewComment] = useState("");
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isLive, setIsLive] = useState(false);
   const [isNotifying, setIsNotifying] = useState(false);
   const [notificationSent, setNotificationSent] = useState(false);
   const activeRoomRef = useRef<string | null>(null);
+  const translationCacheRef = useRef<
+    Map<string, CommentTranslationCacheEntry>
+  >(new Map());
+  const translationInFlightRef = useRef<Set<string>>(new Set());
+  const commentsRef = useRef<DisplayCommentRow[]>([]);
+  commentsRef.current = comments;
 
   const fetchComments = useCallback(
     async (fileName: string) => {
@@ -71,6 +100,131 @@ export const useLiveComments = (
 
     void fetchComments(previewFile.name);
   }, [previewFile?.name, previewFile?.isVideo, fetchComments]);
+
+  const applyCachedDisplayMetadata = useCallback(
+    (rows: DisplayCommentRow[]): DisplayCommentRow[] => {
+      if (!user?.id) return rows;
+
+      return rows.map((comment) => {
+        if (comment.user_id === user.id) {
+          return {
+            ...comment,
+            display_text: undefined,
+            translated: false,
+            translationFailed: false,
+          };
+        }
+
+        const cacheKey = commentTranslationCacheKey(
+          comment.id,
+          selectedLanguage,
+        );
+        const cached = translationCacheRef.current.get(cacheKey);
+        if (!cached) return comment;
+
+        return { ...comment, ...cached };
+      });
+    },
+    [selectedLanguage, user?.id],
+  );
+
+  const commentsTranslationSignature = comments
+    .map(
+      (comment) =>
+        `${comment.id}:${comment.comment_text}:${comment.user_id}`,
+    )
+    .join("|");
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    setComments((prev) => applyCachedDisplayMetadata(prev));
+
+    const targetLanguage = resolveSpeechLanguage(selectedLanguage).geminiName;
+    let cancelled = false;
+
+    const translateMissingComments = async () => {
+      const snapshot = commentsRef.current;
+      const pending = snapshot.filter(
+        (comment) =>
+          comment.user_id !== user.id &&
+          !translationCacheRef.current.has(
+            commentTranslationCacheKey(comment.id, selectedLanguage),
+          ) &&
+          !translationInFlightRef.current.has(
+            commentTranslationCacheKey(comment.id, selectedLanguage),
+          ),
+      );
+
+      if (pending.length === 0) return;
+
+      await Promise.all(
+        pending.map(async (comment) => {
+          const cacheKey = commentTranslationCacheKey(
+            comment.id,
+            selectedLanguage,
+          );
+          translationInFlightRef.current.add(cacheKey);
+
+          try {
+            const result = await translateIncomingChatMessage(
+              comment.comment_text,
+              targetLanguage,
+            );
+
+            if (cancelled) return;
+
+            const entry: CommentTranslationCacheEntry = {
+              display_text: result.translationFailed
+                ? comment.comment_text
+                : result.translated
+                  ? result.text
+                  : comment.comment_text,
+              translated: result.translated && !result.translationFailed,
+              translationFailed: Boolean(result.translationFailed),
+            };
+
+            translationCacheRef.current.set(cacheKey, entry);
+
+            setComments((prev) =>
+              prev.map((row) =>
+                row.id === comment.id ? { ...row, ...entry } : row,
+              ),
+            );
+          } catch {
+            if (cancelled) return;
+
+            const entry: CommentTranslationCacheEntry = {
+              display_text: comment.comment_text,
+              translated: false,
+              translationFailed: true,
+            };
+
+            translationCacheRef.current.set(cacheKey, entry);
+
+            setComments((prev) =>
+              prev.map((row) =>
+                row.id === comment.id ? { ...row, ...entry } : row,
+              ),
+            );
+          } finally {
+            translationInFlightRef.current.delete(cacheKey);
+          }
+        }),
+      );
+    };
+
+    void translateMissingComments();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    commentsTranslationSignature,
+    selectedLanguage,
+    user?.id,
+    applyCachedDisplayMetadata,
+  ]);
 
   useEffect(() => {
     if (!user?.id) {
@@ -183,7 +337,9 @@ export const useLiveComments = (
 
   const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newComment.trim() || !previewFile || !user) return;
+    const commentFileKey =
+      previewFile?.name?.trim() || getReviewRoomId(previewFile, currentFolder);
+    if (!newComment.trim() || !user || !commentFileKey) return;
     const commentTextToSend = newComment.trim();
     setNewComment("");
     const currentTime = videoRef.current?.currentTime ?? 0;
@@ -194,7 +350,7 @@ export const useLiveComments = (
       .from("video_comments")
       .insert([
         {
-          file_name: previewFile.name,
+          file_name: commentFileKey,
           user_id: user.id,
           time_stamp: currentTime,
           comment_text: commentTextToSend,
@@ -238,10 +394,21 @@ export const useLiveComments = (
       return;
     }
     const cleanedText = newCommentText.trim();
+    for (const cacheKey of translationCacheRef.current.keys()) {
+      if (cacheKey.startsWith(`${commentId}:`)) {
+        translationCacheRef.current.delete(cacheKey);
+      }
+    }
     setComments((prev) =>
       prev.map((comment) =>
         comment.id === commentId
-          ? { ...comment, comment_text: cleanedText }
+          ? {
+              ...comment,
+              comment_text: cleanedText,
+              display_text: undefined,
+              translated: false,
+              translationFailed: false,
+            }
           : comment,
       ),
     );
