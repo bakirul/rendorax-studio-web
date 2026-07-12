@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
 import StreamingVideoPlayer from "@/components/dashboard/StreamingVideoPlayer";
 import MediaPreviewPanel from "@/components/dashboard/MediaPreviewPanel";
@@ -20,8 +20,72 @@ import { buildPreviewPlayerKey } from "@/utils/previewAssetKey";
 import { getMediaFileCategory } from "@/utils/mediaFileCategory";
 import GlobalLiveWidget from "@/components/GlobalLiveWidget";
 import ChatbotWidget from "@/components/ChatbotWidget";
+import { Eye, EyeOff } from "lucide-react";
 
 const CLIENT_DISCOVERY_TIMEOUT_MS = 10_000;
+
+type SidebarClientRow = {
+  id: string;
+  displayName?: string | null;
+  email?: string | null;
+  assetCount?: number;
+};
+
+function buildMergedClientList(
+  agencyUsers: Array<{
+    id: string;
+    email?: string;
+    displayName?: string | null;
+    role?: string;
+  }>,
+  assetClients: MediaClientRecord[],
+): SidebarClientRow[] {
+  const byId = new Map<string, SidebarClientRow>();
+
+  for (const user of agencyUsers) {
+    if (user.role !== "client") continue;
+    byId.set(user.id, {
+      id: user.id,
+      displayName: user.displayName,
+      email: user.email,
+    });
+  }
+
+  for (const assetClient of assetClients) {
+    const existing = byId.get(assetClient.userId);
+    if (existing) {
+      existing.assetCount = assetClient.assetCount;
+    } else {
+      byId.set(assetClient.userId, {
+        id: assetClient.userId,
+        assetCount: assetClient.assetCount,
+      });
+    }
+  }
+
+  return Array.from(byId.values()).sort((a, b) =>
+    getClientPrimaryLabel(a).localeCompare(getClientPrimaryLabel(b), undefined, {
+      sensitivity: "base",
+    }),
+  );
+}
+
+function getClientPrimaryLabel(client: SidebarClientRow): string {
+  const displayName = client.displayName?.trim();
+  if (displayName) return displayName;
+
+  const email = client.email?.trim();
+  if (email) return email;
+
+  return `${client.id.substring(0, 8)}...`;
+}
+
+function getClientSecondaryLabel(client: SidebarClientRow): string | null {
+  const displayName = client.displayName?.trim();
+  const email = client.email?.trim();
+  if (displayName && email) return email;
+  return null;
+}
 
 export default function AdminPortal() {
   const [clientsLoading, setClientsLoading] = useState(true);
@@ -71,6 +135,13 @@ export default function AdminPortal() {
   const [projects, setProjects] = useState<any[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [agencyUsers, setAgencyUsers] = useState<any[]>([]);
+  const [showClientForm, setShowClientForm] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [newClient, setNewClient] = useState({
+    displayName: "",
+    email: "",
+    password: "",
+  });
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [newProject, setNewProject] = useState({
     title: "",
@@ -138,6 +209,52 @@ export default function AdminPortal() {
     } finally {
       setTasksLoading(false);
     }
+  };
+
+  const handleCreateClient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (
+      !newClient.displayName.trim() ||
+      !newClient.email.trim() ||
+      !newClient.password
+    ) {
+      return;
+    }
+    setActionLoading("create_client");
+
+    try {
+      const res = await fetch("/api/agency/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          displayName: newClient.displayName.trim(),
+          email: newClient.email.trim(),
+          password: newClient.password,
+        }),
+      });
+
+      if (res.ok) {
+        setMessage({
+          type: "success",
+          text: "Client created successfully.",
+        });
+        setShowClientForm(false);
+        setShowPassword(false);
+        setNewClient({ displayName: "", email: "", password: "" });
+        await loadUsers();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setMessage({
+          type: "error",
+          text: err.error || "Failed to create client.",
+        });
+      }
+    } catch {
+      setMessage({ type: "error", text: "Failed to create client." });
+    }
+
+    setActionLoading(null);
+    setTimeout(() => setMessage(null), 3000);
   };
 
   const handleCreateProject = async (e: React.FormEvent) => {
@@ -470,6 +587,11 @@ export default function AdminPortal() {
 
   const clientUsers = agencyUsers.filter((u: any) => u.role === "client");
   const editorUsers = agencyUsers.filter((u: any) => u.role === "editor" || u.role === "admin");
+  const mergedClients = useMemo(
+    () => buildMergedClientList(agencyUsers, clients),
+    [agencyUsers, clients],
+  );
+  const selectedClientRow = mergedClients.find((c) => c.id === selectedClient) ?? null;
 
   return (
     <main className="min-h-screen bg-bg-body text-text-gray font-main p-6 md:p-10 relative flex justify-center items-start">
@@ -502,7 +624,11 @@ export default function AdminPortal() {
           </div>
           <div className="bg-bg-panel border border-white/5 p-4">
             <p className="text-[10px] uppercase tracking-widest text-text-gray mb-1">Clients</p>
-            <p className="text-2xl font-display text-text-white">{clientsLoading ? "—" : clients.length}</p>
+            <p className="text-2xl font-display text-text-white">
+              {clientsLoading && mergedClients.length === 0
+                ? "—"
+                : mergedClients.length}
+            </p>
           </div>
           <div className="bg-bg-panel border border-white/5 p-4">
             <p className="text-[10px] uppercase tracking-widest text-text-gray mb-1">Team Members</p>
@@ -528,29 +654,137 @@ export default function AdminPortal() {
           <div className="lg:col-span-1 flex flex-col gap-6">
             {/* Client List */}
             <div className="bg-bg-panel border border-white/5 p-6">
-              <h2 className="text-sm uppercase tracking-widest text-gold-primary mb-4 border-b border-white/5 pb-3">
-                Clients
-              </h2>
-              {clientsLoading ? (
+              <div className="flex justify-between items-center mb-4 border-b border-white/5 pb-3 gap-2">
+                <h2 className="text-sm uppercase tracking-widest text-gold-primary">
+                  Clients
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (showClientForm) setShowPassword(false);
+                    setShowClientForm(!showClientForm);
+                  }}
+                  className="text-[10px] bg-gold-primary/10 text-gold-primary border border-gold-primary/30 px-2.5 py-1 uppercase tracking-widest hover:bg-gold-primary hover:text-black transition-colors shrink-0"
+                >
+                  {showClientForm ? "Cancel" : "+ Add Client"}
+                </button>
+              </div>
+
+              {showClientForm && (
+                <form
+                  onSubmit={handleCreateClient}
+                  autoComplete="off"
+                  className="mb-4 bg-bg-body p-4 border border-white/5"
+                >
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-widest text-text-gray mb-2">
+                        Full Name *
+                      </label>
+                      <input
+                        required
+                        type="text"
+                        placeholder="Client full name"
+                        value={newClient.displayName}
+                        onChange={(e) =>
+                          setNewClient({ ...newClient, displayName: e.target.value })
+                        }
+                        className="w-full bg-bg-panel border border-white/10 p-2.5 text-sm text-white focus:border-gold-primary outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-widest text-text-gray mb-2">
+                        Email *
+                      </label>
+                      <input
+                        required
+                        type="email"
+                        autoComplete="new-password"
+                        placeholder="client@company.com"
+                        value={newClient.email}
+                        onChange={(e) =>
+                          setNewClient({ ...newClient, email: e.target.value })
+                        }
+                        className="w-full bg-bg-panel border border-white/10 p-2.5 text-sm text-white focus:border-gold-primary outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-widest text-text-gray mb-2">
+                        Password *
+                      </label>
+                      <div className="relative">
+                        <input
+                          required
+                          type={showPassword ? "text" : "password"}
+                          autoComplete="new-password"
+                          minLength={6}
+                          placeholder="Temporary client password"
+                          value={newClient.password}
+                          onChange={(e) =>
+                            setNewClient({ ...newClient, password: e.target.value })
+                          }
+                          className="w-full bg-bg-panel border border-white/10 p-2.5 pr-10 text-sm text-white focus:border-gold-primary outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword((prev) => !prev)}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-text-gray hover:text-gold-primary transition-colors"
+                          aria-label={showPassword ? "Hide password" : "Show password"}
+                        >
+                          {showPassword ? (
+                            <EyeOff size={16} aria-hidden="true" />
+                          ) : (
+                            <Eye size={16} aria-hidden="true" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={actionLoading === "create_client"}
+                    className="w-full mt-4 bg-gold-primary text-black text-xs font-bold uppercase tracking-widest py-2.5 hover:bg-white transition-colors disabled:opacity-50"
+                  >
+                    Create Client
+                  </button>
+                </form>
+              )}
+
+              {clientsLoading && mergedClients.length === 0 ? (
                 <p className="text-center py-6 text-gold-primary text-xs uppercase tracking-widest">
                   Scanning...
                 </p>
-              ) : clients.length === 0 ? (
+              ) : mergedClients.length === 0 ? (
                 <p className="text-center py-6 text-text-gray italic text-xs">
                   No clients found.
                 </p>
               ) : (
                 <ul className="space-y-2">
-                  {clients.map((client) => (
-                    <li key={client.userId}>
-                      <button
-                        onClick={() => fetchClientData(client.userId)}
-                        className={`w-full text-left p-3 text-xs font-mono transition-all border ${selectedClient === client.userId ? "bg-gold-primary/10 border-gold-primary text-gold-primary" : "bg-bg-body border-white/5 text-text-gray hover:border-white/20"}`}
-                      >
-                        {client.userId.substring(0, 8)}...
-                      </button>
-                    </li>
-                  ))}
+                  {mergedClients.map((client) => {
+                    const primaryLabel = getClientPrimaryLabel(client);
+                    const secondaryLabel = getClientSecondaryLabel(client);
+
+                    return (
+                      <li key={client.id}>
+                        <button
+                          type="button"
+                          onClick={() => fetchClientData(client.id)}
+                          className={`w-full text-left p-3 text-xs transition-all border ${selectedClient === client.id ? "bg-gold-primary/10 border-gold-primary text-gold-primary" : "bg-bg-body border-white/5 text-text-gray hover:border-white/20"}`}
+                        >
+                          <span
+                            className={`block truncate ${secondaryLabel ? "text-white font-medium" : "font-mono"}`}
+                          >
+                            {primaryLabel}
+                          </span>
+                          {secondaryLabel ? (
+                            <span className="block truncate text-[10px] text-text-gray/80 mt-1">
+                              {secondaryLabel}
+                            </span>
+                          ) : null}
+                        </button>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>
@@ -876,7 +1110,10 @@ export default function AdminPortal() {
                   {/* Section Header */}
                   <div className="border-b border-white/5 pb-3">
                     <h3 className="text-sm uppercase tracking-widest text-gold-primary">
-                      Client: {selectedClient.substring(0, 8)}...
+                      Client:{" "}
+                      {selectedClientRow
+                        ? getClientPrimaryLabel(selectedClientRow)
+                        : `${selectedClient?.substring(0, 8)}...`}
                     </h3>
                   </div>
 
