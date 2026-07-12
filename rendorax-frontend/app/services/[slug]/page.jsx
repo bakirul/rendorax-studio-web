@@ -152,6 +152,9 @@ export function generateMetadata({ params }) {
   return {
     title: `${service.title} | Rendorax Studio`,
     description: service.metaDescription,
+    alternates: {
+      canonical: `/services/${params.slug}`,
+    },
   };
 }
 

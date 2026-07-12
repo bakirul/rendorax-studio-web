@@ -47,6 +47,9 @@ export function generateMetadata({ params }: { params: { slug: string } }) {
   return {
     title: `${project.title} | Rendorax Portfolio`,
     description: project.metaDescription,
+    alternates: {
+      canonical: `/portfolio/${params.slug}`,
+    },
   };
 }
 

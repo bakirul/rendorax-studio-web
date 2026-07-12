@@ -185,6 +185,9 @@ export function generateMetadata({ params }: { params: { slug: string } }) {
   return {
     title: `${article.title} | Rendorax Journal`,
     description: article.metaDescription,
+    alternates: {
+      canonical: `/journal/${params.slug}`,
+    },
   };
 }
 

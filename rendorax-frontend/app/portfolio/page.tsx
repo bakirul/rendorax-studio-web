@@ -3,6 +3,9 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import Link from "next/link";
 import ProfessionalTrackRecord from "@/components/portfolio/ProfessionalTrackRecord";
+import PortfolioFilterGrid, {
+  type PortfolioProject,
+} from "@/components/portfolio/PortfolioFilterGrid";
 import { Lock } from "lucide-react";
 
 export const metadata: Metadata = {
@@ -47,6 +50,72 @@ const internationalWorks = [
       "Implemented by Swisscontact. Funded by UKaid, SDC, and DANIDA, in partnership with the Government of Bangladesh.",
   },
 ] as const;
+
+const caseStudyProjects: PortfolioProject[] = [
+  {
+    id: 1,
+    slug: "heroic-archives",
+    title: "The Heroic Archives",
+    category: "Internal / YouTube Original",
+    service: "Lead Editor & Archival Mastering",
+    image:
+      "https://images.unsplash.com/photo-1440404653325-ab127d49abc1?q=80&w=2070&auto=format&fit=crop",
+  },
+  {
+    id: 2,
+    slug: "voiced-classics",
+    title: "Voiced Classics",
+    category: "Internal / YouTube Original",
+    service: "AI Dubbing & Motion Graphics",
+    image:
+      "https://images.unsplash.com/photo-1516280440502-a7f4579c8789?q=80&w=2070&auto=format&fit=crop",
+  },
+  {
+    id: 3,
+    slug: "rendorax-media-reel",
+    title: "Rendorax Broadcast Reel",
+    category: "Rendorax Studio",
+    service: "Full Post-Production",
+    image:
+      "https://images.unsplash.com/photo-1598899134739-24c46f58b8c0?q=80&w=2056&auto=format&fit=crop",
+  },
+  {
+    id: 4,
+    slug: "aurastream",
+    title: "AuraStream",
+    category: "Investor Demo",
+    service: "Project Architecture & UI Presentation",
+    image:
+      "https://images.unsplash.com/photo-1611162617474-5b21e879e113?q=80&w=1974&auto=format&fit=crop",
+  },
+  {
+    id: 5,
+    slug: "rendoraxfit",
+    title: "RendoraxFit Platform",
+    category: "RendoraxFit",
+    service: "Web & Revenue Integration",
+    image:
+      "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?q=80&w=2070&auto=format&fit=crop",
+  },
+  {
+    id: 6,
+    slug: "pawprints-in-silence",
+    title: "PawPrints In Silence",
+    category: "Digital Property",
+    service: "Video Editing & Content Pipeline",
+    image:
+      "https://images.unsplash.com/photo-1583511655857-d19b40a7a54e?q=80&w=2069&auto=format&fit=crop",
+  },
+];
+
+const caseStudyCategories = [
+  "All",
+  "Internal / YouTube Original",
+  "Rendorax Studio",
+  "Investor Demo",
+  "RendoraxFit",
+  "Digital Property",
+];
 
 function WorkCredits({
   agency,
@@ -200,6 +269,11 @@ export default function PortfolioPage() {
           </p>
         </div>
       </section>
+
+      <PortfolioFilterGrid
+        projects={caseStudyProjects}
+        categories={caseStudyCategories}
+      />
 
       <ProfessionalTrackRecord />
 
