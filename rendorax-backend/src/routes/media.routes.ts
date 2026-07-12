@@ -32,6 +32,14 @@ function isClientUser(req: AuthenticatedRequest): boolean {
   return req.user?.role === "client";
 }
 
+function isEditorUser(req: AuthenticatedRequest): boolean {
+  return req.user?.role === "editor";
+}
+
+function canTranscribeMedia(req: AuthenticatedRequest): boolean {
+  return isAdminUser(req) || isEditorUser(req);
+}
+
 function normalizeFolderValue(
   folder: unknown,
 ): string | null | undefined {
@@ -48,6 +56,117 @@ function normalizeFileNameValue(fileName: unknown): string | null {
     return null;
   }
   return trimmed;
+}
+
+type ProjectLinkValidationResult =
+  | { ok: true; projectId: string }
+  | { ok: false; status: 403 | 400 | 404; error: string };
+
+async function validateAgencyProjectLink(
+  prisma: PrismaClient,
+  req: AuthenticatedRequest,
+  projectId: string,
+  assetUserId: string | null,
+): Promise<ProjectLinkValidationResult> {
+  const actorId = req.user?.id;
+  if (!actorId) {
+    return { ok: false, status: 403, error: "Unauthorized" };
+  }
+
+  const trimmedProjectId = projectId.trim();
+  const project = await prisma.agencyProject.findUnique({
+    where: { id: trimmedProjectId },
+    select: { id: true, ownerId: true, clientId: true },
+  });
+
+  if (!project) {
+    return { ok: false, status: 404, error: "Project not found" };
+  }
+
+  if (isClientUser(req)) {
+    return {
+      ok: false,
+      status: 403,
+      error: "Clients cannot link assets to projects",
+    };
+  }
+
+  if (isAdminUser(req)) {
+    if (assetUserId) {
+      const assetOwner = await prisma.user.findUnique({
+        where: { id: assetUserId },
+        select: { role: true },
+      });
+      if (assetOwner?.role === "client" && project.clientId !== assetUserId) {
+        return {
+          ok: false,
+          status: 400,
+          error:
+            "Project must belong to the same client as this vault asset",
+        };
+      }
+    }
+    return { ok: true, projectId: project.id };
+  }
+
+  const isProjectOwner = project.ownerId === actorId;
+  const assignedTask = await prisma.task.findFirst({
+    where: { assigneeId: actorId, projectId: project.id },
+    select: { id: true },
+  });
+
+  if (!isProjectOwner && !assignedTask) {
+    return {
+      ok: false,
+      status: 403,
+      error: "You can only link assets to projects you are assigned to",
+    };
+  }
+
+  return { ok: true, projectId: project.id };
+}
+
+async function assertCanFilterByAgencyProject(
+  prisma: PrismaClient,
+  req: AuthenticatedRequest,
+  projectId: string,
+): Promise<ProjectLinkValidationResult> {
+  const actorId = req.user?.id;
+  if (!actorId) {
+    return { ok: false, status: 403, error: "Unauthorized" };
+  }
+
+  const project = await prisma.agencyProject.findUnique({
+    where: { id: projectId.trim() },
+    select: { id: true, ownerId: true, clientId: true },
+  });
+
+  if (!project) {
+    return { ok: false, status: 404, error: "Project not found" };
+  }
+
+  if (isClientUser(req)) {
+    if (project.clientId !== actorId) {
+      return { ok: false, status: 403, error: "Forbidden" };
+    }
+    return { ok: true, projectId: project.id };
+  }
+
+  if (isAdminUser(req)) {
+    return { ok: true, projectId: project.id };
+  }
+
+  const isProjectOwner = project.ownerId === actorId;
+  const assignedTask = await prisma.task.findFirst({
+    where: { assigneeId: actorId, projectId: project.id },
+    select: { id: true },
+  });
+
+  if (!isProjectOwner && !assignedTask) {
+    return { ok: false, status: 403, error: "Forbidden" };
+  }
+
+  return { ok: true, projectId: project.id };
 }
 
 async function findAccessibleAsset(
@@ -227,13 +346,22 @@ router.post("/assets", async (req: AuthenticatedRequest, res: Response) => {
 
     let resolvedAgencyProjectId: string | null = null;
     if (typeof agencyProjectId === "string" && agencyProjectId.trim()) {
-      const project = await prisma.agencyProject.findUnique({
-        where: { id: agencyProjectId.trim() },
-      });
-      if (!project) {
-        return res.status(404).json({ error: "Project not found" });
+      if (isClientUser(req)) {
+        return res.status(403).json({
+          error: "Clients cannot link assets to projects",
+        });
       }
-      resolvedAgencyProjectId = project.id;
+
+      const linkCheck = await validateAgencyProjectLink(
+        prisma,
+        req,
+        agencyProjectId.trim(),
+        authenticatedUserId,
+      );
+      if (!linkCheck.ok) {
+        return res.status(linkCheck.status).json({ error: linkCheck.error });
+      }
+      resolvedAgencyProjectId = linkCheck.projectId;
     }
 
     const asset = await prisma.mediaAsset.create({
@@ -332,6 +460,7 @@ router.get("/assets", async (req: AuthenticatedRequest, res: Response) => {
     }
 
     const requestedUserId = req.query.userId as string | undefined;
+    const agencyProjectIdParam = req.query.agencyProjectId as string | undefined;
     const folderParam = req.query.folder as string | undefined;
     const normalizedFolder =
       folderParam !== undefined
@@ -361,6 +490,18 @@ router.get("/assets", async (req: AuthenticatedRequest, res: Response) => {
 
     if (normalizedFolder !== undefined) {
       where.folder = normalizedFolder;
+    }
+
+    if (typeof agencyProjectIdParam === "string" && agencyProjectIdParam.trim()) {
+      const filterCheck = await assertCanFilterByAgencyProject(
+        prisma,
+        req,
+        agencyProjectIdParam.trim(),
+      );
+      if (!filterCheck.ok) {
+        return res.status(filterCheck.status).json({ error: filterCheck.error });
+      }
+      where.agencyProjectId = filterCheck.projectId;
     }
 
     const assets = await prisma.mediaAsset.findMany({
@@ -499,16 +640,25 @@ router.patch("/assets/:id", async (req: AuthenticatedRequest, res: Response) => 
 
     let resolvedAgencyProjectId: string | null | undefined = undefined;
     if (agencyProjectId !== undefined) {
+      if (isClientUser(req)) {
+        return res.status(403).json({
+          error: "Clients cannot link assets to projects",
+        });
+      }
+
       if (agencyProjectId === null) {
         resolvedAgencyProjectId = null;
       } else if (typeof agencyProjectId === "string" && agencyProjectId.trim()) {
-        const project = await prisma.agencyProject.findUnique({
-          where: { id: agencyProjectId.trim() },
-        });
-        if (!project) {
-          return res.status(404).json({ error: "Project not found" });
+        const linkCheck = await validateAgencyProjectLink(
+          prisma,
+          req,
+          agencyProjectId.trim(),
+          access.asset.userId,
+        );
+        if (!linkCheck.ok) {
+          return res.status(linkCheck.status).json({ error: linkCheck.error });
         }
-        resolvedAgencyProjectId = project.id;
+        resolvedAgencyProjectId = linkCheck.projectId;
       } else {
         return res.status(400).json({ error: "Invalid agencyProjectId" });
       }
@@ -610,6 +760,10 @@ router.delete("/assets/:id", async (req: AuthenticatedRequest, res: Response) =>
 
 router.post("/transcribe", async (req: AuthenticatedRequest, res: Response) => {
   try {
+    if (!canTranscribeMedia(req)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
     const { assetId, fileUrl, language } = req.body as {
       assetId?: string;
       fileUrl?: string;

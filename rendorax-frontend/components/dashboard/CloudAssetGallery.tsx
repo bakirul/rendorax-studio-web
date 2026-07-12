@@ -22,6 +22,7 @@ interface CloudAssetGalleryProps {
   assets: MediaAssetRecord[];
   loading?: boolean;
   searchQuery?: string;
+  isEditor?: boolean;
   onPreviewAsset?: (asset: MediaAssetRecord) => void;
   onDeleteAsset?: (asset: MediaAssetRecord) => void;
   onRenameAsset?: (asset: MediaAssetRecord) => void;
@@ -62,6 +63,7 @@ export default function CloudAssetGallery({
   assets,
   loading = false,
   searchQuery = "",
+  isEditor = false,
   onPreviewAsset,
   onDeleteAsset,
   onRenameAsset,
@@ -206,6 +208,7 @@ export default function CloudAssetGallery({
     <AssetContextMenu
       asset={selectable}
       shareUrl={playbackUrl}
+      isEditor={isEditor}
       onRename={onRenameAsset ? () => onRenameAsset(asset) : undefined}
       onDelete={onDeleteAsset ? () => onDeleteAsset(asset) : undefined}
     />

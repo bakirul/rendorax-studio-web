@@ -659,6 +659,18 @@ export default function AdminPortal() {
     () => tasks.filter((task: any) => task.status !== "done").length,
     [tasks],
   );
+  const clientProjectsForSelected = useMemo(() => {
+    if (!selectedClient) return [];
+    return projects.filter(
+      (project: any) =>
+        project.clientId === selectedClient ||
+        project.client?.id === selectedClient,
+    );
+  }, [projects, selectedClient]);
+  const unassignedAssetCount = useMemo(
+    () => clientAssets.filter((asset) => !asset.agencyProjectId).length,
+    [clientAssets],
+  );
   const selectedClientRow = mergedClients.find((c) => c.id === selectedClient) ?? null;
   const selectedClientOverview = useMemo(() => {
     if (!selectedClient) return null;
@@ -1222,6 +1234,10 @@ export default function AdminPortal() {
                         (t: any) => t.projectId === proj.id || t.project?.id === proj.id,
                       );
                       const isTaskFormOpen = showTaskFormForProject === proj.id;
+                      const linkedVaultAssets = clientAssets.filter(
+                        (asset) => asset.agencyProjectId === proj.id,
+                      );
+                      const LINKED_ASSET_DISPLAY_LIMIT = 5;
 
                       return (
                         <div
@@ -1421,6 +1437,36 @@ export default function AdminPortal() {
                                     </span>
                                   </li>
                                 ))}
+                              </ul>
+                            )}
+                          </div>
+
+                          <div className="border-t border-white/5 p-4 bg-black/5">
+                            <p className="text-[10px] uppercase tracking-widest text-text-gray mb-2">
+                              Linked Vault Assets ({linkedVaultAssets.length})
+                            </p>
+                            {linkedVaultAssets.length === 0 ? (
+                              <p className="text-[11px] text-text-gray/60 italic">
+                                No vault assets linked yet.
+                              </p>
+                            ) : (
+                              <ul className="space-y-1">
+                                {linkedVaultAssets
+                                  .slice(0, LINKED_ASSET_DISPLAY_LIMIT)
+                                  .map((asset) => (
+                                    <li
+                                      key={asset.id}
+                                      className="text-[11px] text-text-white/80 font-mono truncate"
+                                    >
+                                      {asset.fileName}
+                                    </li>
+                                  ))}
+                                {linkedVaultAssets.length > LINKED_ASSET_DISPLAY_LIMIT ? (
+                                  <li className="text-[10px] text-text-gray">
+                                    +{linkedVaultAssets.length - LINKED_ASSET_DISPLAY_LIMIT}{" "}
+                                    more
+                                  </li>
+                                ) : null}
                               </ul>
                             )}
                           </div>
@@ -1784,9 +1830,16 @@ export default function AdminPortal() {
 
                   {/* Vault Assets */}
                   <div className="bg-bg-panel border border-white/5 p-6">
-                    <h3 className="text-sm uppercase tracking-widest text-gold-primary mb-4 border-b border-white/10 pb-3">
-                      Vault Assets
-                    </h3>
+                    <div className="flex flex-wrap justify-between items-center gap-2 mb-4 border-b border-white/10 pb-3">
+                      <h3 className="text-sm uppercase tracking-widest text-gold-primary">
+                        Vault Assets
+                      </h3>
+                      {!filesLoading && unassignedAssetCount > 0 ? (
+                        <span className="text-[9px] uppercase tracking-widest px-2 py-0.5 border border-white/10 bg-black/20 text-text-gray">
+                          {unassignedAssetCount} unlinked
+                        </span>
+                      ) : null}
+                    </div>
                     {filesLoading ? (
                       <p className="text-center py-8 text-gold-primary text-xs uppercase tracking-widest">
                         Scanning...
@@ -1808,11 +1861,18 @@ export default function AdminPortal() {
                                 <p className="text-text-white text-sm font-mono truncate max-w-[250px]">
                                   {asset.fileName}
                                 </p>
-                                <p className="text-text-gray text-[10px] uppercase tracking-wider mt-1">
-                                  {asset.fileSize
-                                    ? `${(asset.fileSize / (1024 * 1024)).toFixed(2)} MB`
-                                    : "—"}
-                                </p>
+                                <div className="flex flex-wrap items-center gap-2 mt-1">
+                                  <p className="text-text-gray text-[10px] uppercase tracking-wider">
+                                    {asset.fileSize
+                                      ? `${(asset.fileSize / (1024 * 1024)).toFixed(2)} MB`
+                                      : "—"}
+                                  </p>
+                                  {!asset.agencyProjectId ? (
+                                    <span className="text-[8px] uppercase tracking-widest px-1.5 py-0.5 border border-white/10 bg-white/5 text-text-gray">
+                                      Unlinked
+                                    </span>
+                                  ) : null}
+                                </div>
                               </div>
                               <div className="flex items-center gap-2">
                                 <select
@@ -1824,7 +1884,7 @@ export default function AdminPortal() {
                                   className="bg-bg-panel text-gold-primary text-[9px] px-2 py-1.5 border border-white/10 outline-none cursor-pointer max-w-[120px] truncate"
                                 >
                                   <option value="">Unlinked</option>
-                                  {projects.map((p: any) => (
+                                  {clientProjectsForSelected.map((p: any) => (
                                     <option key={p.id} value={p.id}>
                                       {p.title}
                                     </option>

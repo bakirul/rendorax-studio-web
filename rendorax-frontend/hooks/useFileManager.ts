@@ -63,7 +63,18 @@ function mapMediaAssetToVaultFile(asset: MediaAssetRecord): VaultFileItem {
   };
 }
 
-export const useFileManager = (user: any, currentFolder: string) => {
+export type FileManagerProjectOptions = {
+  uploadAgencyProjectId?: string;
+  fetchAgencyProjectId?: string;
+  /** Client review: skip fetch and clear vault when no project is selected. */
+  requireProjectIdForFetch?: boolean;
+};
+
+export const useFileManager = (
+  user: any,
+  currentFolder: string,
+  projectOptions?: FileManagerProjectOptions,
+) => {
   const [vaultItems, setVaultItems] = useState<any[]>([]);
   const [fileUrls, setFileUrls] = useState<Record<string, string>>({});
   const [thumbnailUrls, setThumbnailUrls] = useState<Record<string, string>>({});
@@ -78,10 +89,12 @@ export const useFileManager = (user: any, currentFolder: string) => {
   const [vaultAssetsByName, setVaultAssetsByName] = useState<
     Record<string, MediaAssetRecord>
   >({});
+  const [vaultFetchLoading, setVaultFetchLoading] = useState(false);
   const [allFolders, setAllFolders] = useState<string[]>([]);
   const fileUrlByVaultNameRef = useRef<Record<string, string>>({});
   const assetIdByVaultNameRef = useRef<Record<string, string>>({});
   const vaultAssetByVaultNameRef = useRef<Record<string, MediaAssetRecord>>({});
+  const fetchGenRef = useRef(0);
 
   const fetchAllFolders = useCallback(async () => {
     if (!user?.id) {
@@ -98,10 +111,43 @@ export const useFileManager = (user: any, currentFolder: string) => {
     }
   }, [user?.id]);
 
+  const clearVaultState = useCallback(() => {
+    fileUrlByVaultNameRef.current = {};
+    assetIdByVaultNameRef.current = {};
+    vaultAssetByVaultNameRef.current = {};
+    setVaultItems([]);
+    setFileUrls({});
+    setThumbnailUrls({});
+    setVaultAssetsByName({});
+  }, []);
+
   const fetchFiles = useCallback(async (userId: string, folderPath: string) => {
+    const gen = ++fetchGenRef.current;
+
+    if (
+      projectOptions?.requireProjectIdForFetch &&
+      !projectOptions.fetchAgencyProjectId
+    ) {
+      if (gen === fetchGenRef.current) {
+        clearVaultState();
+        setVaultFetchLoading(false);
+      }
+      return;
+    }
+
+    if (projectOptions?.requireProjectIdForFetch) {
+      clearVaultState();
+    }
+
+    setVaultFetchLoading(true);
+
     try {
       const params = buildMediaAssetFetchParams(folderPath, userId);
+      if (projectOptions?.fetchAgencyProjectId) {
+        params.agencyProjectId = projectOptions.fetchAgencyProjectId;
+      }
       const assets = await fetchMediaAssets(params);
+      if (gen !== fetchGenRef.current) return;
       const vaultFiles = assets.map(mapMediaAssetToVaultFile);
       const urlMap: Record<string, string> = {};
       const idMap: Record<string, string> = {};
@@ -139,30 +185,64 @@ export const useFileManager = (user: any, currentFolder: string) => {
       setFileUrls({});
       setThumbnailUrls({});
       setVaultAssetsByName({});
+    } finally {
+      if (gen === fetchGenRef.current) {
+        setVaultFetchLoading(false);
+      }
     }
-  }, []);
+  }, [
+    projectOptions?.fetchAgencyProjectId,
+    projectOptions?.requireProjectIdForFetch,
+    clearVaultState,
+  ]);
 
   useEffect(() => {
-    if (user?.id) {
-      fetchFiles(user.id, currentFolder);
-    } else {
-      setVaultItems([]);
-      setFileUrls({});
-      setThumbnailUrls({});
-      setVaultAssetsByName({});
-      fileUrlByVaultNameRef.current = {};
-      assetIdByVaultNameRef.current = {};
-      vaultAssetByVaultNameRef.current = {};
+    if (!user?.id) {
+      clearVaultState();
+      return;
     }
-  }, [user, currentFolder, fetchFiles]);
+
+    if (
+      projectOptions?.requireProjectIdForFetch &&
+      !projectOptions.fetchAgencyProjectId
+    ) {
+      fetchGenRef.current += 1;
+      clearVaultState();
+      setVaultFetchLoading(false);
+      return;
+    }
+
+    fetchFiles(user.id, currentFolder);
+  }, [
+    user,
+    currentFolder,
+    fetchFiles,
+    projectOptions?.requireProjectIdForFetch,
+    projectOptions?.fetchAgencyProjectId,
+    clearVaultState,
+  ]);
 
   useEffect(() => {
-    if (user?.id) {
-      fetchAllFolders();
-    } else {
+    if (!user?.id) {
       setAllFolders([]);
+      return;
     }
-  }, [user?.id, fetchAllFolders]);
+
+    if (
+      projectOptions?.requireProjectIdForFetch &&
+      !projectOptions.fetchAgencyProjectId
+    ) {
+      setAllFolders([]);
+      return;
+    }
+
+    fetchAllFolders();
+  }, [
+    user?.id,
+    fetchAllFolders,
+    projectOptions?.requireProjectIdForFetch,
+    projectOptions?.fetchAgencyProjectId,
+  ]);
 
   const buildR2UploadObjectKey = (fileName: string) => {
     const sanitizedName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
@@ -292,6 +372,7 @@ export const useFileManager = (user: any, currentFolder: string) => {
           userId: user.id,
           folder: mediaFolderForSave(currentFolder),
           fileSize: file.size,
+          agencyProjectId: projectOptions?.uploadAgencyProjectId,
         });
 
         setUploadSession({
@@ -472,6 +553,7 @@ export const useFileManager = (user: any, currentFolder: string) => {
     fileUrls,
     thumbnailUrls,
     vaultAssetsByName,
+    vaultFetchLoading,
     uploading,
     uploadProgress,
     uploadSession,

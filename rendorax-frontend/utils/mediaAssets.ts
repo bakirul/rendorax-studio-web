@@ -47,6 +47,7 @@ export interface FetchMediaAssetsParams {
   userId?: string;
   /** Pass "" for vault root (assets with null folder). Omit only when intentionally fetching all. */
   folder?: string;
+  agencyProjectId?: string;
 }
 
 export interface MediaClientRecord {
@@ -407,6 +408,9 @@ export async function fetchMediaAssets(
   const searchParams = new URLSearchParams();
   if (params?.userId) searchParams.set("userId", params.userId);
   if (params?.folder !== undefined) searchParams.set("folder", params.folder);
+  if (params?.agencyProjectId) {
+    searchParams.set("agencyProjectId", params.agencyProjectId);
+  }
 
   const query = searchParams.toString();
   const headers = await getBackendAuthHeaders();

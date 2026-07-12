@@ -20,6 +20,7 @@ import { getSelectableAssetPreviewKey } from "@/utils/previewAssetKey";
 interface AssetContextMenuProps {
   asset: GallerySelectableAsset;
   shareUrl: string;
+  isEditor?: boolean;
   className?: string;
   onRename?: () => void;
   onDelete?: () => void;
@@ -28,6 +29,7 @@ interface AssetContextMenuProps {
 export default function AssetContextMenu({
   asset,
   shareUrl,
+  isEditor = false,
   className = "",
   onRename,
   onDelete,
@@ -195,7 +197,7 @@ export default function AssetContextMenu({
           >
             Copy Link
           </button>
-          {canGenerateSubtitles && (
+          {isEditor && canGenerateSubtitles && (
             <button
               type="button"
               disabled={isTranscribing}

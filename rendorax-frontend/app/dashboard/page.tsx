@@ -150,6 +150,7 @@ export default function DashboardPage() {
     projectStage,
     setProjectStage,
     setViewSettings,
+    clearGallerySelection,
   } = useDashboardStore();
 
   const setActiveReviewRoomId = useGlobalStore((state) => state.setActiveReviewRoomId);
@@ -313,6 +314,79 @@ export default function DashboardPage() {
 
   // Active Project selector (Operations Core — Step 5: link uploads to a project)
   const [activeProjectId, setActiveProjectId] = useState<string>("");
+  const [assetViewScope, setAssetViewScope] = useState<"all" | "active">("all");
+
+  type ClientProject = { id: string; title: string; status: string };
+  const [clientProjects, setClientProjects] = useState<ClientProject[]>([]);
+  const [clientProjectsLoading, setClientProjectsLoading] = useState(false);
+  const [clientProjectsError, setClientProjectsError] = useState<string | null>(
+    null,
+  );
+
+  const loadClientProjects = useCallback(async () => {
+    setClientProjectsLoading(true);
+    setClientProjectsError(null);
+    try {
+      const res = await fetch("/api/agency/projects");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setClientProjects([]);
+        setClientProjectsError(
+          (data as { error?: string }).error || "Failed to load projects",
+        );
+        return;
+      }
+      const raw = Array.isArray((data as { projects?: unknown }).projects)
+        ? (data as { projects: unknown[] }).projects
+        : [];
+      const projects: ClientProject[] = raw
+        .map((p) => {
+          const row = p as { id?: string; title?: string; status?: string };
+          if (!row.id || !row.title) return null;
+          return {
+            id: row.id,
+            title: row.title,
+            status: row.status ?? "",
+          };
+        })
+        .filter((p): p is ClientProject => p !== null);
+      setClientProjects(projects);
+    } catch {
+      setClientProjects([]);
+      setClientProjectsError("Failed to load projects");
+    } finally {
+      setClientProjectsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (loading || isEditor || !user) return;
+    void loadClientProjects();
+  }, [loading, isEditor, user, loadClientProjects]);
+
+  useEffect(() => {
+    if (isEditor || clientProjectsLoading) return;
+    if (clientProjects.length === 1) {
+      setActiveProjectId(clientProjects[0].id);
+      return;
+    }
+    if (clientProjects.length === 0) {
+      setActiveProjectId("");
+      return;
+    }
+    if (
+      activeProjectId &&
+      !clientProjects.some((p) => p.id === activeProjectId)
+    ) {
+      setActiveProjectId("");
+    }
+  }, [
+    isEditor,
+    clientProjects,
+    clientProjectsLoading,
+    activeProjectId,
+  ]);
+
   const availableProjects = useMemo(() => {
     const seen = new Map<string, { id: string; title: string }>();
     for (const task of editorTasks) {
@@ -322,6 +396,25 @@ export default function DashboardPage() {
     }
     return Array.from(seen.values());
   }, [editorTasks]);
+
+  const fileManagerProjectOptions = useMemo(
+    () => ({
+      uploadAgencyProjectId: activeProjectId || undefined,
+      fetchAgencyProjectId: isEditor
+        ? assetViewScope === "active" && activeProjectId
+          ? activeProjectId
+          : undefined
+        : activeProjectId || undefined,
+      requireProjectIdForFetch: !isEditor,
+    }),
+    [isEditor, activeProjectId, assetViewScope],
+  );
+
+  useEffect(() => {
+    if (!activeProjectId && assetViewScope === "active") {
+      setAssetViewScope("all");
+    }
+  }, [activeProjectId, assetViewScope]);
 
   // Refs
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -333,6 +426,7 @@ export default function DashboardPage() {
     fileUrls,
     thumbnailUrls,
     vaultAssetsByName,
+    vaultFetchLoading,
     uploading,
     uploadSession,
     allFolders,
@@ -346,7 +440,7 @@ export default function DashboardPage() {
     handleDeleteFolder,
     fetchAllFolders,
     fetchFiles,
-  } = useFileManager(user, currentFolder);
+  } = useFileManager(user, currentFolder, fileManagerProjectOptions);
 
   const vaultAssetsList = useMemo(
     () => Object.values(vaultAssetsByName),
@@ -371,6 +465,44 @@ export default function DashboardPage() {
   const [cloudAssets, setCloudAssets] = useState<MediaAssetRecord[]>([]);
   const [cloudAssetsLoading, setCloudAssetsLoading] = useState(false);
   const cloudAssetsLoadGenRef = useRef(0);
+  const prevClientProjectIdRef = useRef(activeProjectId);
+
+  const applyProjectFilterToFetchParams = useCallback(
+    (params: ReturnType<typeof buildMediaAssetFetchParams>) => {
+      if (isEditor && assetViewScope === "active" && activeProjectId) {
+        params.agencyProjectId = activeProjectId;
+      } else if (!isEditor && activeProjectId) {
+        params.agencyProjectId = activeProjectId;
+      }
+      return params;
+    },
+    [isEditor, assetViewScope, activeProjectId],
+  );
+
+  const clientAwaitingProjectSelection =
+    !isEditor && (!activeProjectId || clientProjectsLoading);
+
+  useEffect(() => {
+    if (isEditor) return;
+
+    const prevProjectId = prevClientProjectIdRef.current;
+    if (prevProjectId === activeProjectId) return;
+    prevClientProjectIdRef.current = activeProjectId;
+
+    cloudAssetsLoadGenRef.current += 1;
+    setCloudAssets([]);
+    setPreviewFile(null);
+    setCompareFile(null);
+    setIsCompareMode(false);
+    clearGallerySelection();
+  }, [
+    isEditor,
+    activeProjectId,
+    setPreviewFile,
+    setCompareFile,
+    setIsCompareMode,
+    clearGallerySelection,
+  ]);
 
   // Live Comments Hook
   const {
@@ -1120,13 +1252,27 @@ export default function DashboardPage() {
       return;
     }
 
+    if (!isEditor && !activeProjectId) {
+      cloudAssetsLoadGenRef.current += 1;
+      setCloudAssets([]);
+      return;
+    }
+
     const gen = ++cloudAssetsLoadGenRef.current;
-    const params = buildMediaAssetFetchParams(currentFolder, user.id);
+    const params = applyProjectFilterToFetchParams(
+      buildMediaAssetFetchParams(currentFolder, user.id),
+    );
     const data = await fetchMediaAssets(params);
     if (gen === cloudAssetsLoadGenRef.current) {
       setCloudAssets(data);
     }
-  }, [user?.id, currentFolder]);
+  }, [
+    user?.id,
+    currentFolder,
+    isEditor,
+    activeProjectId,
+    applyProjectFilterToFetchParams,
+  ]);
 
   const handleR2UploadSuccess = useCallback(
     async (result: import("@/utils/r2Upload").R2UploadResult, file: File) => {
@@ -1142,7 +1288,7 @@ export default function DashboardPage() {
         userId: user.id,
         folder: mediaFolderForSave(currentFolder),
         fileSize: file.size,
-        agencyProjectId: isEditor && activeProjectId ? activeProjectId : undefined,
+        agencyProjectId: activeProjectId || undefined,
       });
 
       setActiveBin("cloud");
@@ -1211,10 +1357,19 @@ export default function DashboardPage() {
       return;
     }
 
+    if (!isEditor && !activeProjectId) {
+      cloudAssetsLoadGenRef.current += 1;
+      setCloudAssets([]);
+      setCloudAssetsLoading(false);
+      return;
+    }
+
     const gen = ++cloudAssetsLoadGenRef.current;
     setCloudAssetsLoading(true);
     try {
-      const params = buildMediaAssetFetchParams(currentFolder, user.id);
+      const params = applyProjectFilterToFetchParams(
+        buildMediaAssetFetchParams(currentFolder, user.id),
+      );
       const data = await fetchMediaAssets(params);
       if (gen === cloudAssetsLoadGenRef.current) {
         setCloudAssets(data);
@@ -1229,7 +1384,13 @@ export default function DashboardPage() {
         setCloudAssetsLoading(false);
       }
     }
-  }, [user?.id, currentFolder]);
+  }, [
+    user?.id,
+    currentFolder,
+    isEditor,
+    activeProjectId,
+    applyProjectFilterToFetchParams,
+  ]);
 
   useEffect(() => {
     if (!loading && user && activeBin === "cloud") {
@@ -1321,6 +1482,18 @@ export default function DashboardPage() {
       .toLowerCase();
     return originalName.includes((searchQuery || "").toLowerCase());
   });
+
+  const clientProjectHasNoAssets =
+    !isEditor &&
+    Boolean(activeProjectId) &&
+    !clientProjectsLoading &&
+    !isClientVaultRootSelected &&
+    (activeBin === "cloud"
+      ? !cloudAssetsLoading && cloudAssets.length === 0
+      : !vaultFetchLoading &&
+        filteredFiles.length === 0 &&
+        folders.length === 0);
+
   const allVideoFiles = (files || []).filter(
     (f) => f?.name?.match(/\.(mp4|webm|ogg|mov|mxf)$/i) !== null,
   );
@@ -1390,24 +1563,87 @@ export default function DashboardPage() {
         onR2UploadSuccess={handleR2UploadSuccess}
       />
 
-      <div className="shrink-0 bg-[#0a0a0f] border-b border-white/5 px-6 py-2 flex items-center gap-3 flex-wrap">
-        <span className="text-xs font-semibold text-white tracking-wide">
-          {isEditor ? "Production Workspace" : "Review Workspace"}
-        </span>
-        <span
-          className={`text-[9px] uppercase tracking-widest font-bold px-2 py-0.5 rounded-full border shrink-0 ${
-            isEditor
-              ? "border-[#d4af37]/40 bg-[#d4af37]/10 text-[#d4af37]"
-              : "border-blue-400/40 bg-blue-400/10 text-blue-300"
-          }`}
-        >
-          {isEditor ? "Editor / Team" : "Client"}
-        </span>
-        <span className="text-[10px] text-gray-500 hidden sm:inline truncate">
-          {isEditor
-            ? "Assigned tasks, active project, live editing, uploads, review tools"
-            : "Preview assets, give feedback, join live review, approve or request revision"}
-        </span>
+      <div className="shrink-0 bg-[#0a0a0f] border-b border-white/5 px-6 py-2 flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3 flex-wrap min-w-0">
+          <span className="text-xs font-semibold text-white tracking-wide">
+            {isEditor ? "Production Workspace" : "Review Workspace"}
+          </span>
+          <span
+            className={`text-[9px] uppercase tracking-widest font-bold px-2 py-0.5 rounded-full border shrink-0 ${
+              isEditor
+                ? "border-[#d4af37]/40 bg-[#d4af37]/10 text-[#d4af37]"
+                : "border-blue-400/40 bg-blue-400/10 text-blue-300"
+            }`}
+          >
+            {isEditor ? "Editor / Team" : "Client"}
+          </span>
+          <span className="text-[10px] text-gray-500 hidden sm:inline truncate">
+            {isEditor
+              ? "Assigned tasks, active project, live editing, uploads, review tools"
+              : "Preview assets, give feedback, join live review, approve or request revision"}
+          </span>
+        </div>
+
+        {!isEditor ? (
+          <div className="flex items-center gap-2 shrink-0">
+            {clientProjectsLoading ? (
+              <span className="text-[10px] text-gray-500 uppercase tracking-widest">
+                Loading projects…
+              </span>
+            ) : clientProjectsError ? (
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-red-400 border border-red-500/20 bg-red-500/5 px-2 py-1">
+                  {clientProjectsError}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void loadClientProjects()}
+                  className="text-[9px] uppercase tracking-widest text-blue-300 hover:text-blue-200 transition-colors"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : clientProjects.length === 0 ? (
+              <span className="text-[10px] text-gray-500 italic">
+                No projects are available for review yet.
+              </span>
+            ) : clientProjects.length === 1 ? (
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] uppercase tracking-widest text-gray-500 hidden sm:inline">
+                  Project
+                </span>
+                <span className="text-[10px] text-blue-300 font-medium truncate max-w-[160px]">
+                  {clientProjects[0].title}
+                </span>
+                {clientProjects[0].status ? (
+                  <span className="text-[9px] uppercase tracking-widest text-gray-500">
+                    {clientProjects[0].status}
+                  </span>
+                ) : null}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] uppercase tracking-widest text-gray-500 hidden sm:inline">
+                  Project
+                </span>
+                <select
+                  value={activeProjectId}
+                  onChange={(e) => setActiveProjectId(e.target.value)}
+                  className="bg-[#121217] text-blue-300 text-[10px] px-2 py-1 border border-white/10 outline-none cursor-pointer max-w-[180px] truncate"
+                  title="Select a project to review"
+                >
+                  <option value="">Select project…</option>
+                  {clientProjects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.title}
+                      {p.status ? ` (${p.status})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+        ) : null}
       </div>
 
       {isEditor && (
@@ -1459,6 +1695,34 @@ export default function DashboardPage() {
                     </option>
                   ))}
                 </select>
+                {activeProjectId ? (
+                  <div className="flex border border-white/10 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setAssetViewScope("all")}
+                      className={`text-[9px] uppercase tracking-widest px-2 py-1 transition-colors ${
+                        assetViewScope === "all"
+                          ? "bg-[#d4af37]/20 text-[#d4af37]"
+                          : "text-gray-500 hover:text-gray-300"
+                      }`}
+                      title="Show all accessible assets"
+                    >
+                      All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAssetViewScope("active")}
+                      className={`text-[9px] uppercase tracking-widest px-2 py-1 transition-colors ${
+                        assetViewScope === "active"
+                          ? "bg-[#d4af37]/20 text-[#d4af37]"
+                          : "text-gray-500 hover:text-gray-300"
+                      }`}
+                      title="Show only assets linked to the active project"
+                    >
+                      Project
+                    </button>
+                  </div>
+                ) : null}
               </div>
             )}
           </div>
@@ -1516,9 +1780,14 @@ export default function DashboardPage() {
                           ) : null}
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
                             {task.project ? (
-                              <span className="text-[9px] uppercase tracking-widest text-gray-500">
+                              <button
+                                type="button"
+                                onClick={() => setActiveProjectId(task.project!.id)}
+                                className="text-[9px] uppercase tracking-widest text-gray-500 hover:text-[#d4af37] transition-colors"
+                                title="Set as active project"
+                              >
                                 {task.project.title}
-                              </span>
+                              </button>
                             ) : null}
                             {clientLabel ? (
                               <span className="text-[9px] uppercase tracking-widest text-gray-500">
@@ -1679,7 +1948,16 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
-                  {isClientVaultRootSelected ? (
+                  {clientAwaitingProjectSelection ? (
+                    <div className="flex h-full min-h-[320px] flex-col items-center justify-center rounded-xl border border-dashed border-white/5 bg-[#0a0a0f]/40 px-6 py-16 text-center">
+                      <span className="mb-4 text-3xl opacity-30">📁</span>
+                      <p className="text-xs font-medium uppercase tracking-[0.25em] text-gray-500">
+                        {clientProjectsLoading
+                          ? "Loading projects…"
+                          : "Select a project to view its review assets."}
+                      </p>
+                    </div>
+                  ) : isClientVaultRootSelected ? (
                     <div className="flex h-full min-h-[320px] flex-col items-center justify-center rounded-xl border border-dashed border-white/5 bg-[#0a0a0f]/40 px-6 py-16 text-center">
                       <span className="mb-4 text-3xl opacity-30">📂</span>
                       <p className="text-xs font-medium uppercase tracking-[0.25em] text-gray-500">
@@ -1687,6 +1965,13 @@ export default function DashboardPage() {
                       </p>
                       <p className="mt-2 max-w-xs text-[11px] leading-relaxed text-gray-600">
                         Open Cloud Delivery or Vault inside Client Vault to browse assets.
+                      </p>
+                    </div>
+                  ) : clientProjectHasNoAssets ? (
+                    <div className="flex h-full min-h-[320px] flex-col items-center justify-center rounded-xl border border-dashed border-white/5 bg-[#0a0a0f]/40 px-6 py-16 text-center">
+                      <span className="mb-4 text-3xl opacity-30">📁</span>
+                      <p className="text-xs font-medium uppercase tracking-[0.25em] text-gray-500">
+                        No review assets are available for this project yet.
                       </p>
                     </div>
                   ) : (
@@ -1712,6 +1997,7 @@ export default function DashboardPage() {
                           assets={cloudAssets}
                           loading={cloudAssetsLoading}
                           searchQuery={searchQuery}
+                          isEditor={isEditor}
                           onPreviewAsset={handleCloudAssetPreview}
                           onDeleteAsset={onDeleteCloudAsset}
                           onRenameAsset={onRenameCloudAsset}
@@ -1734,6 +2020,7 @@ export default function DashboardPage() {
                           fileUrls={fileUrls}
                           thumbnailUrls={thumbnailUrls}
                           vaultAssetsByName={vaultAssetsByName}
+                          isEditor={isEditor}
                           onPreview={handlePreview}
                           onRenameFile={onRenameFile}
                           onDeleteFile={onDeleteFile}
