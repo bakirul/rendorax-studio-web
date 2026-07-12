@@ -1,5 +1,3 @@
-"use client";
-
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import Link from "next/link";
@@ -10,6 +8,8 @@ const serviceData = {
   "broadcast-editing": {
     title: "Broadcast Editing",
     subtitle: "Precision timeline architecture for television & digital.",
+    metaDescription:
+      "Precision broadcast editing for television and digital platforms, including multi-camera sync, network compliance, offline-to-online workflows, and robust timeline architecture.",
     content:
       "Built on over 16 years of hands-on experience in high-pressure broadcast television environments. We don't just cut footage; we build robust timeline architectures. From multi-camera synchronization to adhering to strict network delivery compliance, every sequence is engineered for flawless broadcast execution.",
     features: [
@@ -23,6 +23,8 @@ const serviceData = {
   "web-series-drama": {
     title: "Web-Series & Drama Editing",
     subtitle: "Narrative structuring and emotional pacing for OTT platforms.",
+    metaDescription:
+      "Web-series and drama editing for OTT platforms with multi-episode structure, emotional pacing, dialogue editing, and continuity management across full seasons.",
     content:
       "Multi-episode narrative structuring, emotional pacing, dialogue editing, and continuity management tailored for OTT platforms and serial dramas. We ensure character arcs and story loops are flawlessly maintained across the entire season for maximum viewer retention.",
     features: [
@@ -36,6 +38,8 @@ const serviceData = {
   "corporate-commercial": {
     title: "Corporate & Commercial Video Editing",
     subtitle: "High-end brand storytelling and dynamic campaigns.",
+    metaDescription:
+      "Corporate and commercial video editing for profiles, brand campaigns, and social content—delivered with agency-level polish, consistency, and audience engagement.",
     content:
       "High-end corporate profiles, dynamic brand commercials, and social campaigns optimized for maximum engagement and brand consistency. We deliver polished, agency-level edits that align perfectly with your corporate identity and marketing goals.",
     features: [
@@ -49,6 +53,8 @@ const serviceData = {
   "animation-dub": {
     title: "Animation & Dub",
     subtitle: "Flawless character localization and sync.",
+    metaDescription:
+      "Animation and dubbing services with frame-by-frame dialogue sync, character lip matching, international localization, and precise M&E track integration.",
     content:
       "Audio and visual alignment requires microscopic precision. Our dubbing workflows ensure frame-by-frame dialogue syncing and accurate character lip-matching, providing a seamless viewing experience for international localization and premium animated content.",
     features: [
@@ -62,6 +68,8 @@ const serviceData = {
   "audio-mastering": {
     title: "Audio Mastering",
     subtitle: "Broadcast-safe soundscapes for every platform.",
+    metaDescription:
+      "Broadcast-safe audio mastering with strict LUFS compliance, loudness tracking, noise reduction, dialogue isolation, and multi-stem deliverables for any platform.",
     content:
       "Audio clipping or phase issues can ruin a masterpiece. We implement strict LUFS-compliant mixing and broadcast-safe loudness tracking. Whether it's for an OTT platform, traditional television, or digital release, your mix will translate perfectly with pristine clarity and dynamic range.",
     features: [
@@ -75,6 +83,8 @@ const serviceData = {
   "color-grading": {
     title: "Color Grading",
     subtitle: "Cinematic look development and visual consistency.",
+    metaDescription:
+      "Cinematic color grading with advanced look development, skin-tone preservation, Rec.709 and HDR mastering, and flawless shot-to-shot visual matching.",
     content:
       "Transform flat footage into visual poetry. Our color pipelines are built on advanced look development, ensuring precise skin-tone preservation and perfect shot-to-shot matching. We handle complex Rec.709 and HDR conversions for premium digital and television distribution.",
     features: [
@@ -88,6 +98,8 @@ const serviceData = {
   "motion-vfx": {
     title: "Motion & VFX",
     subtitle: "High-impact visual enhancements and clean plating.",
+    metaDescription:
+      "Motion graphics and VFX for broadcast, including dynamic titles, lower-thirds, clean plate design, object removal, and high-impact visual enhancements.",
     content:
       "From dynamic lower-thirds that elevate a documentary to high-impact broadcast titles that hook the audience in the first five seconds. Our motion graphics and VFX pipelines also include meticulous clean plate design and object removal for a distraction-free narrative.",
     features: [
@@ -101,6 +113,8 @@ const serviceData = {
   "archival-restoration": {
     title: "Archival Restoration",
     subtitle: "Breathing new life into legacy footage.",
+    metaDescription:
+      "Archival restoration for legacy footage with AI upscaling, advanced tape denoise, digitization workflows, and long-term media preservation standards.",
     content:
       "History deserves to be seen clearly. We utilize cutting-edge AI upscaling, advanced tape denoise protocols, and meticulous preservation workflows to digitize and restore legacy footage, bringing classic media into the modern high-definition era.",
     features: [
@@ -114,6 +128,8 @@ const serviceData = {
   "podcast-editing": {
     title: "Podcast Editing",
     subtitle: "Premium cinematic mastering for audio and video podcasts.",
+    metaDescription:
+      "Premium podcast editing for audio and video shows with multi-microphone leveling, deep restoration, cinematic switching, and platform-ready mastering.",
     content:
       "Elevate your conversational content. We manage complex multi-microphone leveling, deep audio restoration, and strict synchronization for video podcasts. The result is a premium, cinematic listening and viewing experience that retains audience retention.",
     features: [
@@ -125,6 +141,19 @@ const serviceData = {
     mediaUrl: "/assets/Linkedin%20Banner%202.png",
   },
 };
+
+export function generateMetadata({ params }) {
+  const service = serviceData[params.slug];
+
+  if (!service) {
+    notFound();
+  }
+
+  return {
+    title: `${service.title} | Rendorax Studio`,
+    description: service.metaDescription,
+  };
+}
 
 export default function ServiceDetail({ params }) {
   const { slug } = params;

@@ -13,6 +13,8 @@ const articlesData = [
     readTime: "6 Min Read",
     author: "H M Bakirul Islam",
     bgGlow: "from-gold-primary/10",
+    metaDescription:
+      "Broadcast audio must meet strict LUFS and true peak limits. Learn -23 LUFS targets, dialogue isolation, gating, and mastering rules for TV delivery.",
     content: (
       <>
         <p className="text-base md:text-lg text-text-gray font-light leading-relaxed mb-6">
@@ -81,6 +83,8 @@ const articlesData = [
     readTime: "8 Min Read",
     author: "H M Bakirul Islam",
     bgGlow: "from-blue-500/10",
+    metaDescription:
+      "Master export formats after Picture Lock: ProRes 422 HQ, DNxHR HQX, textless masters, and multi-channel stems for broadcast and OTT delivery.",
     content: (
       <>
         <p className="text-base md:text-lg text-text-gray font-light leading-relaxed mb-6">
@@ -113,6 +117,8 @@ const articlesData = [
     readTime: "12 Min Read",
     author: "Rendorax Dev Core",
     bgGlow: "from-purple-500/10",
+    metaDescription:
+      "Automate post-production with ComfyUI node workflows, n8n orchestration, Dockerized local GPU compute, and secure routing of assets to client vaults.",
     content: (
       <>
         <p className="text-base md:text-lg text-text-gray font-light leading-relaxed mb-6">
@@ -142,6 +148,8 @@ const articlesData = [
     readTime: "5 Min Read",
     author: "H M Bakirul Islam",
     bgGlow: "from-green-500/10",
+    metaDescription:
+      "Rescue legacy tape and film with digitization, noise reduction, and AI upscaling—preserving authentic grain while clearing scanlines and chroma artifacts.",
     content: (
       <>
         <p className="text-base md:text-lg text-text-gray font-light leading-relaxed mb-6">
@@ -166,6 +174,19 @@ const articlesData = [
     ),
   },
 ];
+
+export function generateMetadata({ params }: { params: { slug: string } }) {
+  const article = articlesData.find((a) => a.slug === params.slug);
+
+  if (!article) {
+    notFound();
+  }
+
+  return {
+    title: `${article.title} | Rendorax Journal`,
+    description: article.metaDescription,
+  };
+}
 
 export default function BlogArticlePage({ params }) {
   const article = articlesData.find((a) => a.slug === params.slug);
