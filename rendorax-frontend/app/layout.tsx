@@ -30,6 +30,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://www.rendorax.com"),
   title: "Rendorax Studio | Broadcast Post-Production",
   description:
     "Enterprise-level broadcast post-production, live cinematic collaboration, and Vault management.",
@@ -40,9 +41,24 @@ export const metadata: Metadata = {
     title: "Rendorax Studio",
     description:
       "Enterprise-level broadcast post-production and live cinematic collaboration.",
-    url: "https://rendorax.com",
+    url: "https://www.rendorax.com",
     siteName: "Rendorax Studio",
     type: "website",
+    images: [
+      {
+        url: "/assets/og-image.jpg",
+        width: 1200,
+        height: 630,
+        alt: "Rendorax Studio — Broadcast Post-Production Platform",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Rendorax Studio",
+    description:
+      "Enterprise-level broadcast post-production, live cinematic collaboration, and Vault management.",
+    images: ["/assets/og-image.jpg"],
   },
 };
 

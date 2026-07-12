@@ -1,6 +1,13 @@
+import type { Metadata } from "next";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ContactForm from "@/components/contact/ContactForm";
+
+export const metadata: Metadata = {
+  title: "Contact | Rendorax Studio",
+  description:
+    "Start a project with Rendorax Studio. Submit your briefing for review and a technical consultation within 24 hours.",
+};
 
 export default function ContactPage() {
   return (

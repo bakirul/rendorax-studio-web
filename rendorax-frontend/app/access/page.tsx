@@ -57,7 +57,7 @@ export default function AccessPage() {
         <div className="text-center mb-10 relative z-10">
           <Link href="/" className="inline-block mb-8">
             <Image
-              src="/assets/logo.png"
+              src="/assets/logo.svg"
               alt="Rendorax"
               width={120}
               height={60}

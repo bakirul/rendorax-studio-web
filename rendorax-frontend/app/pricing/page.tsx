@@ -1,6 +1,13 @@
+import type { Metadata } from "next";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import Link from "next/link";
+
+export const metadata: Metadata = {
+  title: "Pricing | Rendorax Studio",
+  description:
+    "Post-production pricing models for broadcast, OTT, and enterprise client workflows with Rendorax Studio.",
+};
 
 export default function PricingPage() {
   return (

@@ -1,6 +1,13 @@
+import type { Metadata } from "next";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import Link from "next/link";
+
+export const metadata: Metadata = {
+  title: "Services | Rendorax Studio",
+  description:
+    "Broadcast editing, OTT drama, corporate video, dubbing, audio mastering, color grading, VFX, restoration, and podcast post-production.",
+};
 
 export default function ServicesPage() {
   const services = [

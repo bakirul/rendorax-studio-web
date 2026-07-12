@@ -1,8 +1,15 @@
+import type { Metadata } from "next";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import Link from "next/link";
 import ProfessionalTrackRecord from "@/components/portfolio/ProfessionalTrackRecord";
 import { Lock } from "lucide-react";
+
+export const metadata: Metadata = {
+  title: "Portfolio | Rendorax Studio",
+  description:
+    "Selected international documentary and corporate production work, plus a professional track record with global development partners.",
+};
 
 const internationalWorks = [
   {

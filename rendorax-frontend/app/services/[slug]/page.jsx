@@ -18,7 +18,7 @@ const serviceData = {
       "Offline to Online Workflows",
       "Live Action Co-ordination integration",
     ],
-    mediaUrl: "/gifs/broadcast-editing.gif", // 🌟 Placeholder GIF Link
+    mediaUrl: "/assets/broadcast-ready-video-editing-timeline.png",
   },
   "web-series-drama": {
     title: "Web-Series & Drama Editing",
@@ -31,7 +31,7 @@ const serviceData = {
       "Continuity Management",
       "OTT Platform Compliance",
     ],
-    mediaUrl: "/gifs/web-series-drama.gif", // 🌟 Placeholder GIF Link
+    mediaUrl: "/assets/rendorax-broadcast-post-production-studio.png",
   },
   "corporate-commercial": {
     title: "Corporate & Commercial Video Editing",
@@ -44,7 +44,7 @@ const serviceData = {
       "Social Media Campaigns",
       "Brand Consistency & Guidelines",
     ],
-    mediaUrl: "/gifs/corporate-commercial.gif", // 🌟 Placeholder GIF Link
+    mediaUrl: "/assets/Linkedin%20Banner%201.png",
   },
   "animation-dub": {
     title: "Animation & Dub",
@@ -57,7 +57,7 @@ const serviceData = {
       "International Localization",
       "M&E Track Integration",
     ],
-    mediaUrl: "/gifs/animation-dub.gif", // 🌟 Placeholder GIF Link
+    mediaUrl: "/assets/ai-automated-video-production-workflow.png",
   },
   "audio-mastering": {
     title: "Audio Mastering",
@@ -70,7 +70,7 @@ const serviceData = {
       "Noise Reduction & Dialogue Isolation",
       "Multi-Stem Deliverables",
     ],
-    mediaUrl: "/gifs/audio-mastering.gif", // 🌟 Placeholder GIF Link
+    mediaUrl: "/assets/Visual%20diagram%20(Master%20Export%20Workflow%20graphic).png",
   },
   "color-grading": {
     title: "Color Grading",
@@ -83,7 +83,7 @@ const serviceData = {
       "Rec.709 & HDR Conversions",
       "Shot-to-Shot Matching",
     ],
-    mediaUrl: "/gifs/color-grading.gif", // 🌟 Placeholder GIF Link
+    mediaUrl: "/assets/rendorax-post-production-client-vault-dashboard.png",
   },
   "motion-vfx": {
     title: "Motion & VFX",
@@ -96,7 +96,7 @@ const serviceData = {
       "Clean Plate Design",
       "Object Tracking & Removal",
     ],
-    mediaUrl: "/gifs/motion-vfx.gif", // 🌟 Placeholder GIF Link
+    mediaUrl: "/assets/Centralize%20Dashboard.png",
   },
   "archival-restoration": {
     title: "Archival Restoration",
@@ -109,7 +109,7 @@ const serviceData = {
       "Advanced Tape Denoise",
       "Preservation Workflows",
     ],
-    mediaUrl: "/gifs/archival-restoration.gif", // 🌟 Placeholder GIF Link
+    mediaUrl: "/assets/rendorax-client-vault-portal.png",
   },
   "podcast-editing": {
     title: "Podcast Editing",
@@ -122,7 +122,7 @@ const serviceData = {
       "Cinematic Video Switching",
       "Platform-Ready Export",
     ],
-    mediaUrl: "/gifs/podcast-editing.gif", // 🌟 Placeholder GIF Link
+    mediaUrl: "/assets/Linkedin%20Banner%202.png",
   },
 };
 
@@ -168,10 +168,6 @@ export default function ServiceDetail({ params }) {
               src={service.mediaUrl}
               alt={service.title}
               className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity duration-500"
-              onError={(e) => {
-                e.currentTarget.src =
-                  "https://images.unsplash.com/photo-1618761714954-0b8cd0026356?auto=format&fit=crop&w=1200&q=80";
-              }}
             />
           </div>
 

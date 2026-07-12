@@ -1,7 +1,14 @@
+import type { Metadata } from "next";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import Link from "next/link";
 import JournalFilterArticles from "@/components/journal/JournalFilterArticles";
+
+export const metadata: Metadata = {
+  title: "Journal | Rendorax Studio",
+  description:
+    "Technical articles on broadcast audio, delivery formats, AI automation, and archival restoration from the Rendorax edit bay.",
+};
 
 const articles = [
   {
