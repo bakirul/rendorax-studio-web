@@ -6,6 +6,7 @@ import {
   type AuthenticatedRequest,
 } from "../middleware/requireAuth";
 import { ensureAgencyUser, mapSupabaseRoleToAgencyRole } from "../lib/agencyUsers";
+import { getSupabaseAdminClient } from "../lib/supabaseAdmin";
 
 const router = Router();
 
@@ -17,6 +18,25 @@ function getPrisma(req: AuthenticatedRequest): PrismaClient {
 
 function isAdminRole(role: string | undefined): boolean {
   return role === "admin";
+}
+
+const EMAIL_FORMAT = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function normalizeEmail(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const email = value.trim().toLowerCase();
+  if (!email || !EMAIL_FORMAT.test(email)) return null;
+  return email;
+}
+
+function isDuplicateAuthError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("already been registered") ||
+    lower.includes("already registered") ||
+    lower.includes("user already exists") ||
+    lower.includes("email address has already been registered")
+  );
 }
 
 async function requireAgencyUser(req: AuthenticatedRequest, res: Response) {
@@ -98,6 +118,104 @@ router.get("/users", async (req: AuthenticatedRequest, res: Response) => {
   }
 });
 
+router.post("/users", async (req: AuthenticatedRequest, res: Response) => {
+  const actor = await requireAgencyUser(req, res);
+  if (!actor) return;
+
+  if (!isAdminRole(req.user?.role)) {
+    res.status(403).json({ error: "Admin access required" });
+    return;
+  }
+
+  const supabaseAdmin = getSupabaseAdminClient();
+  if (!supabaseAdmin) {
+    console.error("[agency] SUPABASE_SERVICE_ROLE_KEY or SUPABASE_URL is not configured");
+    res.status(503).json({ error: "Client provisioning unavailable" });
+    return;
+  }
+
+  const body = req.body ?? {};
+  const displayName =
+    typeof body.displayName === "string" ? body.displayName.trim() : "";
+  const email = normalizeEmail(body.email);
+  const password = typeof body.password === "string" ? body.password : "";
+
+  if (!displayName) {
+    res.status(400).json({ error: "displayName is required" });
+    return;
+  }
+
+  if (!email) {
+    res.status(400).json({ error: "A valid email is required" });
+    return;
+  }
+
+  if (!password || password.length < 6) {
+    res.status(400).json({ error: "password must be at least 6 characters" });
+    return;
+  }
+
+  const prisma = getPrisma(req);
+
+  const existingByEmail = await prisma.user.findUnique({ where: { email } });
+  if (existingByEmail) {
+    res.status(409).json({ error: "A user with this email already exists" });
+    return;
+  }
+
+  const { data: createData, error: createError } =
+    await supabaseAdmin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { full_name: displayName },
+      app_metadata: { role: "client" },
+    });
+
+  if (createError || !createData.user?.id) {
+    const message = createError?.message ?? "Failed to create client";
+    if (isDuplicateAuthError(message)) {
+      res.status(409).json({ error: "A user with this email already exists" });
+      return;
+    }
+    console.error("Failed to create client:", message);
+    res.status(502).json({ error: "Failed to provision client account" });
+    return;
+  }
+
+  const supabaseUserId = createData.user.id;
+
+  try {
+    const user = await prisma.user.upsert({
+      where: { id: supabaseUserId },
+      create: {
+        id: supabaseUserId,
+        email,
+        displayName,
+        role: "client",
+      },
+      update: {
+        email,
+        displayName,
+        role: "client",
+      },
+      select: { id: true, email: true, displayName: true, role: true },
+    });
+
+    console.info(
+      `[agency] Client provisioned by admin ${actor.id}: user ${user.id}`,
+    );
+
+    res.status(201).json({ user });
+  } catch (error) {
+    console.error("Failed to sync Prisma user after client creation:", error);
+    await supabaseAdmin.auth.admin.deleteUser(supabaseUserId).catch((deleteError) => {
+      console.error("Failed to roll back Supabase user after Prisma error:", deleteError);
+    });
+    res.status(500).json({ error: "Failed to save client record" });
+  }
+});
+
 router.post("/projects", async (req: AuthenticatedRequest, res: Response) => {
   const actor = await requireAgencyUser(req, res);
   if (!actor) return;
@@ -125,6 +243,11 @@ router.post("/projects", async (req: AuthenticatedRequest, res: Response) => {
     const client = await prisma.user.findUnique({ where: { id: clientId } });
     if (!client) {
       res.status(404).json({ error: "Client user not found" });
+      return;
+    }
+
+    if (client.role !== "client") {
+      res.status(400).json({ error: "Selected user is not a client" });
       return;
     }
   }
@@ -201,6 +324,11 @@ router.post("/tasks", async (req: AuthenticatedRequest, res: Response) => {
   });
   if (!assignee) {
     res.status(404).json({ error: "Assignee user not found" });
+    return;
+  }
+
+  if (assignee.role !== "editor" && assignee.role !== "admin") {
+    res.status(400).json({ error: "Selected user cannot be assigned tasks" });
     return;
   }
 
