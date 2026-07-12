@@ -2,21 +2,43 @@
 
 > **Generated for:** ChatGPT / AI assistant context upload  
 > **Workspace root:** `C:\Users\user\rendorax-studio`  
-> **Last updated:** July 4, 2026 (design/UI regression freeze audit; feature work frozen)  
+> **Last updated:** July 12, 2026 (production verification complete; Admin HQ + client management synced)  
 > **Do not paste secret values from this file into public channels — variable names only.**
 
-### ⛔ Feature work freeze (2026-07-04)
+### Current project status (2026-07-12)
 
-**Status:** **FROZEN** until `design-regression-freeze-audit.md` recovery plan is reviewed and Phase 1 QA passes.
+**Overall:** Admin HQ and client management are production-verified. Production frontend (Vercel) and backend (Render) are live and healthy. `main` is at commit `34af1c8`.
 
-| Blocked until thaw | Allowed |
-|--------------------|---------|
-| Operations WP2+ | Inspection / documentation |
-| Admin ops UI wiring | Manual UI QA (operator) |
-| Timeline Sharing Phase 2+ | Committing approved admin recovery bundle |
-| New dashboard/admin features | P0 asset loading fix (after QA approval) |
+| Area | Status |
+|------|--------|
+| Production deployment | **Live** — `34af1c8` deployed; Vercel check success (2026-07-12) |
+| Production backend | **Live** — Render `https://rendorax-backend.onrender.com` healthy |
+| Admin HQ | **Complete** — Phase 1A/1B, Client Overview Card, Open Tasks KPI, USD billing display |
+| Client management | **Complete** — provisioning, professional client list, role assignment validation |
+| Dashboard / vault | **Stable** — local QA complete; some production workflows still pending §14 |
+| Operations Core WP2+ | **Pending** — WP1 schema complete; next work package not started |
+| Timeline Sharing Phase 2+ | **Pending** |
 
-**WP1 Prisma schema:** Complete — no further backend feature work until thaw.
+### Recent milestones (July 2026)
+
+| Date | Milestone | Commit(s) |
+|------|-----------|-----------|
+| 2026-07-12 | Admin HQ UI bundle deployed and live-verified | `34af1c8` |
+| 2026-07-12 | Production verification complete (Vercel + Render + operator Admin HQ QA) | `34af1c8` |
+| — | Admin client provisioning complete | `6e37c64` |
+| — | Project and task role assignment validation complete | `650c2d7` |
+
+### Feature governance (revised 2026-07-12)
+
+The **2026-07-04 design/UI regression freeze** is **partially superseded** for Admin HQ: the approved admin recovery bundle is committed, deployed, and production-verified.
+
+| Still gated | Unblocked |
+|-------------|-----------|
+| Operations Core WP2+ (awaiting explicit approval) | Admin HQ UI polish and client management |
+| Timeline Sharing Phase 2+ | Inspection / documentation |
+| Broad dashboard redesign | Approved bug fixes and UX clarity on existing surfaces |
+
+**WP1 Prisma schema:** Complete. No schema changes were required for the July 12 Admin HQ UI bundle (`34af1c8`).
 
 ---
 
@@ -418,18 +440,18 @@ npx prisma studio        # GUI explorer
 | Backend → PostgreSQL (Prisma) | **Working (local)** | `npx prisma db push` succeeded against `bviltofeuqsibbgancby` |
 | Backend → Cloudflare R2 | **Configured (local)** | Credentials in `rendorax-backend/.env.local` |
 
-### Production
+### Production (verified 2026-07-12)
 
-> Not directly verified in this workspace audit. See **§14 Needs Verification**.
-
-| Connection | Status |
-|------------|--------|
-| Frontend (Vercel) → Backend REST | **Needs verification** |
-| Frontend → Backend agency/media API | **Needs verification** |
-| Frontend → Backend Socket.io | **Needs verification** |
-| Live-site Supabase auth (login/session) | **Needs verification** |
-| R2 media upload/playback | **Needs verification** |
-| Backend production hosting | **Not deployed** (no Dockerfile/platform config in repo) |
+| Connection | Status | Notes |
+|------------|--------|-------|
+| Frontend (Vercel) | **Live** | `https://www.rendorax.com`; commit `34af1c8` deployed; Vercel check success |
+| Backend (Render) | **Live** | `https://rendorax-backend.onrender.com/api/health` → 200 |
+| Frontend → Backend REST | **Verified (production)** | Admin HQ live QA passed; backend healthy |
+| Frontend → Backend agency/media API | **Verified (production)** | Client/project/task flows functional on `/admin` |
+| Frontend → Backend Socket.io | **Needs verification** | Not re-tested in July 12 production pass |
+| Live-site Supabase auth (login/session) | **Verified (production)** | Admin login and `/admin` access confirmed in operator QA |
+| R2 media upload/playback | **Needs verification** | Vault asset loading verified on Admin HQ; full dashboard playback not re-tested |
+| Backend production hosting | **Deployed (Render)** | No Dockerfile in repo; live on Render |
 
 ### Local dev startup
 
@@ -447,23 +469,28 @@ npm run dev
 
 ## 12. Deployment Setup
 
-### Frontend (Vercel — intended)
+### Frontend (Vercel — live)
 
 | Item | Status |
 |------|--------|
+| Production URL | `https://www.rendorax.com` |
+| Latest production commit | `34af1c8` — Admin HQ UI bundle (2026-07-12) |
+| Vercel deployment | **Success** — GitHub commit status verified 2026-07-12 |
 | `vercel.json` | **Not present** — relies on Next.js defaults |
 | Framework | Next.js 14.2.3 App Router |
 | Build command | `npm run build` |
 | Env vars | Set all `NEXT_PUBLIC_*` + server secrets in Vercel dashboard |
-| `NEXT_PUBLIC_BACKEND_URL` | Must point to **production backend URL** (not localhost) |
+| `NEXT_PUBLIC_BACKEND_URL` | Points to production Render backend (confirmed by live Admin HQ) |
 | `public/_redirects` | Present (`/* /index.html 200`) — Netlify-style, may be legacy/unused on Vercel |
 
-### Backend (hosting TBD)
+### Backend (Render — live)
 
 | Item | Status |
 |------|--------|
-| Dockerfile | **Not present** |
-| Railway / Render / Fly config | **Not present** |
+| Production URL | `https://rendorax-backend.onrender.com` |
+| Health endpoint | `GET /api/health` → 200 |
+| Dockerfile | **Not present** in repo |
+| Railway / Render / Fly config | **Not present** in repo (deployed manually on Render) |
 | Build | `npm run build` → `node dist/index.js` |
 | Requirements | Long-running process, WebSocket support, FFmpeg binary, optional Redis |
 | Port | `PORT` env (default 4000) |
@@ -483,11 +510,11 @@ npm run dev
 | `utils/agencyBackend.ts` union narrowing error | **Fixed (local)** | `ok: true as const` / `false as const` discriminant |
 | `utils/agencyBackend.ts` top-level `return` | **Fixed (local)** | Logic moved inside `proxyAgencyRequest` |
 | Prisma P1000 auth failed | **Fixed (local)** | DB URLs consolidated to `.env.local` only |
-| `npm run build` (frontend) | **Passing (local)** | Verified via `npm run build` |
-| Agency API UI | **Not implemented** | Backend + proxy routes exist; no dashboard/admin UI — see `operations-core-gap-analysis.md` |
-| UI / design regression freeze | **ACTIVE** | Admin recovery uncommitted; dashboard shell stable — `design-regression-freeze-audit.md` |
-| Operations core (clients/projects/team) | WP1 done; **WP2+ frozen** | Gap analysis complete; resume after UI QA |
-| Backend production hosting | **Not configured** | No Dockerfile or platform config in repo |
+| `npm run build` (frontend) | **Passing (local + production)** | Local build passes; Vercel deploy success on `34af1c8` |
+| Agency API UI (Admin HQ) | **Implemented — production verified (2026-07-12)** | Project/task CRUD on `/admin`; editor task view on `/dashboard` still pending |
+| UI / design regression freeze | **Partially superseded (2026-07-12)** | Admin HQ recovery bundle shipped and live-verified; WP2+ and Timeline Sharing Phase 2+ still gated |
+| Operations core (clients/projects/team) | WP1 done; **WP2+ pending** | Admin client/project/task flows live; next work package not started |
+| Backend production hosting | **Deployed (Render)** | Live at `rendorax-backend.onrender.com`; no repo deploy config |
 | `websocket/server.ts` (port 3001) | **Orphaned** | Not imported by `index.ts` — legacy |
 | `rendorax-backend/schema.prisma` (root) | **Stale** | Use `prisma/schema.prisma` instead |
 | `GET /api/projects` in frontend | **Unused** | `src/lib/api.ts` — nothing imports it |
@@ -502,37 +529,37 @@ npm run dev
 | Timeline comment markers (scrubber) | **Resolved — manually verified (local, 2026-07-03)** | `VideoTimelineScrubber` ticks from `video_comments.time_stamp`; tooltip + `jumpToTime`; report: `timeline-comment-markers-plan.md` |
 | Offline timeline marker export (CSV + JSON) | **Resolved — manually verified (local, 2026-07-03)** | Vault toolbar **Export Markers**; `exportReviewMarkers.ts`; SMPTE @ 24fps; author via `getCommentDisplayName()`; report: `offline-timeline-marker-export-plan.md` |
 | Premiere Pro XML marker export (xmeml) | **Resolved — manually verified (local, 2026-07-03)** | `buildMarkersXmeml()`; File → Import in Premiere; sequence markers; report: `premiere-xml-marker-export-plan.md` |
-| Admin login (`admin-studio@kachnamedia.com`) | **Resolved — operator verified (2026-07-04)** | `app_metadata.role = admin`; `/admin` accessible; report: `admin-login-failure-trace.md`, `admin-account-setup-guide.md` |
-| Admin dashboard HQ (functional) | **Partial — Phase 1 + init hang fix (2026-07-04)** | Sidebar from `GET /api/media/clients`; shell no longer blocked on discovery; manual verify pending |
-| Admin HQ visual system | **Comm strip + loading UX implemented — pending manual verify (2026-07-04)** | Embedded live tools + header AI; no floating duplicates on `/admin`; `admin-hq-design-regression-report.md` |
-| Admin HQ Vault Assets empty | **Open — inspected (2026-07-04)** | Silent `fetchMediaAssets` error masking; `admin-hq-asset-loading-trace.md` |
+| Admin login (`admin-studio@kachnamedia.com`) | **Resolved — production verified (2026-07-12)** | `app_metadata.role = admin`; `/admin` accessible; operator QA passed |
+| Admin dashboard HQ (functional) | **Complete — production verified (2026-07-12)** | Client discovery, project/task CRUD, phase control, billing, vault assets; commit `34af1c8` |
+| Admin HQ visual system | **Complete — production verified (2026-07-12)** | Phase 1A polish, Phase 1B professional client list, Client Overview Card, Open Tasks KPI |
+| Admin HQ Vault Assets | **Resolved — production verified (2026-07-12)** | Vault asset loading functional in operator QA; prior empty-list trace superseded |
+| Admin client provisioning | **Complete — production verified** | `6e37c64` — Supabase admin user creation + `/api/agency/users` + admin UI |
+| Admin professional client list (Phase 1B) | **Complete — production verified** | Search, All/Active/Legacy filters, tiered sort, legacy divider; bundled in `34af1c8` |
+| Role assignment validation | **Complete — production verified** | `650c2d7` — project and task assignment role enforcement |
+| USD billing display migration | **Complete — production verified** | `34af1c8` — display-only; `Total Amount (USD)`, `$` formatting; no schema/handler changes |
 
 ---
 
 ## 14. Needs Verification
 
-Items below are **not confirmed** by direct inspection in this workspace. Do not mark complete until tested on production/live.
+Items below are **not confirmed** on production as of 2026-07-12. Admin HQ and deployment items verified in July 12 pass are removed.
 
 | Item | Why unverified |
 |------|----------------|
-| **Vercel production build/deploy** | Reported OK by team; not re-run in this audit |
-| **Production frontend → backend API** | `NEXT_PUBLIC_BACKEND_URL` on Vercel may still point to localhost; production backend host not confirmed |
-| **Live-site login / logout / session refresh** | New Supabase project (`bviltofeuqsibbgancby`); production auth flow not tested end-to-end |
-| **Vercel Production Supabase env vars** | Dashboard env vars not readable from repo; must match `bviltofeuqsibbgancby` |
-| **Supabase Auth URL Configuration** | Site URL + Redirect URLs for production domain(s) not confirmed |
-| **R2 upload and playback (production)** | Local credentials exist; live CDN/playback not tested |
-| **Backend deployed to production** | No hosting config in repo; backend not deployed |
-| **Legacy Supabase P1 tables in new project** | `project_status`, `project_status_details`, `client_invoices` — **present (PostgREST 200, WP0 2026-07-04)**; tables empty; RLS live test pending — `operations-core-phase1-preflight.md` |
-| **Legacy Supabase P0 tables (production)** | `video_comments`, `video_metadata` verified **local dev only** (2026-07-03); production Supabase not re-tested |
-| **Review notify / compiledNotes (production)** | Compile & Send + Notify Team verified **local dev only** (2026-07-03); production Resend/Discord + full notes delivery not re-tested |
-| **Comment author + avatar (production)** | Resolved **local dev only** (2026-07-03); production Supabase P1 SQL not re-tested |
-| **Compare workflow (production)** | Resolved **local dev only** (2026-07-03); production not tested |
-| **Offline timeline marker export (production)** | CSV + JSON + XML export verified **local dev only** (2026-07-03); production not tested |
-| **Supabase Storage bucket `client-vault`** | Legacy — admin sidebar only; **do not create for Admin HQ**; `admin-client-discovery-migration-plan.md` |
+| **Frontend → Backend Socket.io (production)** | Not re-tested in July 12 production pass |
+| **R2 upload and playback (dashboard production)** | Vault loading verified on Admin HQ; full dashboard upload/playback not re-tested |
+| **Vercel Production Supabase env vars** | Dashboard env vars not readable from repo; assumed correct based on live auth |
+| **Supabase Auth URL Configuration** | Site URL + Redirect URLs for production domain(s) not re-audited in July 12 pass |
+| **Legacy Supabase P0 tables (production)** | `video_comments`, `video_metadata` verified **local dev only** (2026-07-03) |
+| **Review notify / compiledNotes (production)** | Verified **local dev only** (2026-07-03) |
+| **Comment author + avatar (production)** | Verified **local dev only** (2026-07-03) |
+| **Compare workflow (production)** | Verified **local dev only** (2026-07-03) |
+| **Offline timeline marker export (production)** | Verified **local dev only** (2026-07-03) |
 | **Redis/BullMQ transcode worker (production)** | Optional; requires `REDIS_URL` — not verified live |
-| **Admin `app_metadata.role` for users** | Operator account verified 2026-07-04; other users may still lack role |
-| **Admin dashboard HQ panels** | P1 tables + client discovery migration — `admin-client-discovery-migration-plan.md`, `admin-dashboard-qa-issue-map.md` |
-| **Admin HQ visual system** | Fix A+B applied — pending local verify — `admin-hq-design-regression-report.md` (ADM-009 fixed; ADM-008 Fix C deferred) |
+| **Admin `app_metadata.role` for non-operator users** | Operator account verified; other users may still lack role |
+| **Editor task view on `/dashboard`** | Agency tasks API exists; editor-facing dashboard UI not production-verified |
+| **GlobalLiveWidget logged-out visitor flow** | Implemented 2026-07-05; pending manual verify |
+| **Timeline Sharing Phase 1** | Implemented; pending two-browser verify |
 
 ---
 
@@ -555,7 +582,7 @@ Only items confirmed by **local dev** manual verification on 2026-07-03. **Produ
 | Timeline comment markers (scrubber) | Resolved |
 | Offline timeline marker export (CSV + JSON) | Resolved |
 | Premiere Pro XML marker export (xmeml) | Resolved |
-| Production deploy / live env | **Pending §14** |
+| Production deploy / live env | **Verified (2026-07-12)** | Vercel `34af1c8` + Render backend healthy |
 
 ### Schema & API (code present)
 
@@ -586,15 +613,44 @@ Only items confirmed by **local dev** manual verification on 2026-07-03. **Produ
 - [x] **Premiere Pro XML marker export (Phase 2a)** — xmeml sequence markers; Premiere File → Import; correct timecodes; author in marker comment; CSV/JSON preserved. Report: `premiere-xml-marker-export-plan.md`. **Resolved — manually verified (local, 2026-07-03).**
 - [x] **Compare workflow (Cloud CDN)** — V1 (Reference) + V2 (Current) side-by-side; compare dropdown; cloud/R2 + vault compare; initial sync; no ghost/background playback; single player when compare off. Reports: `compare-workflow-regression-report.md`. **Resolved — manually verified (local, 2026-07-03).**
 
-> **Local vs production:** Dashboard QA items above (upload, comments, compare, reviewer identity, review notify + compiledNotes, offline marker export, R2 playback) are **local dev only** unless noted. Production — see §14.
-
 ### Documentation
 
 - [x] Auth inspection reports: `supabase-auth-live-test-report.md`, `production-auth-flow-walkthrough.md`
 - [x] `AI_TEAM_PROTOCOL.md` added at workspace root
 - [x] Documentation protocol: dual source-of-truth (`AI_TEAM_PROTOCOL.md` + this checklist)
+- [x] **July 12 documentation sync** — production verification + Admin HQ milestones recorded in this checklist
 
-> **Not listed as completed:** Vercel production deploy, production API connectivity, live auth — see **§14 Needs Verification**.
+> **Local vs production:** Dashboard QA items above are **local dev only** unless noted. Admin HQ and deployment verified in **§15a (2026-07-12)**.
+
+---
+
+## 15a. Recent Completed Work — Production Verified (2026-07-12)
+
+Verified by deployment checks, GitHub Vercel commit status, Render health probe, and operator Admin HQ live QA.
+
+### Deployment & infrastructure
+
+- [x] **Production frontend deployed (Vercel)** — `https://www.rendorax.com`; commit `34af1c8` on `main`; Vercel deployment success (2026-07-12)
+- [x] **Production backend deployed (Render)** — `https://rendorax-backend.onrender.com/api/health` → 200
+- [x] **Production build** — `npm run build` passes locally; Vercel build succeeded for `34af1c8`
+- [x] **No deployment issues found** — operator QA and external checks clean
+
+### Client management
+
+- [x] **Admin client provisioning** — `6e37c64`: Supabase admin user creation, `supabaseAdmin.ts`, `/api/agency/users`, admin UI wiring
+- [x] **Professional client list (Phase 1B)** — search, All/Active/Legacy filters, tiered sort, legacy divider, improved client cards
+- [x] **Role assignment validation** — `650c2d7`: project and task assignment role enforcement
+
+### Admin HQ (`34af1c8` — frontend only; no backend/schema/API changes)
+
+- [x] **Phase 1A UI polish** — client search, scrollable list, asset count badges, empty states
+- [x] **Phase 1B professional client list** — see Client management above
+- [x] **Client Overview Card** — client-scoped project/task/asset/invoice/phase/last-activity stats
+- [x] **Open Tasks KPI** — replaces static "Operational" metric
+- [x] **USD billing display migration** — `Total Amount (USD)`, `$` formatting in overview and invoice list; display-only (no schema/handler changes)
+- [x] **Admin HQ live verification** — client search/filters, selection, overview card, phase control, billing, vault assets, project/task creation; no console errors reported
+
+> **Commit note:** `34af1c8` message references USD migration; diff bundles Phase 1A + 1B + Client Overview Card + Open Tasks KPI + USD display (~503 insertions in `app/admin/page.tsx`).
 
 ---
 
@@ -604,25 +660,33 @@ Each item appears **once**. Production-specific checks are in §14 unless listed
 
 ### High priority
 
-- [ ] Test live-site login/authentication with new Supabase project — see `production-auth-flow-walkthrough.md` §11
-- [ ] Confirm Vercel Production env vars: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` → `bviltofeuqsibbgancby`
+- [x] Test live-site login/authentication with new Supabase project — **production verified (2026-07-12)** via operator Admin HQ QA
+- [ ] Confirm Vercel Production env vars: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` → `bviltofeuqsibbgancby` (assumed correct; not re-audited from repo)
 - [ ] Confirm Supabase Auth URL Configuration (Site URL + Redirect URLs) for production domain(s)
-- [ ] Deploy backend to a host with WebSocket + FFmpeg support (Railway, Render, Fly.io, VPS)
-- [ ] Set `NEXT_PUBLIC_BACKEND_URL` in Vercel to production backend URL (after backend is deployed)
-- [ ] Wire agency management UI into dashboard/admin (API exists; UI does not)
+- [x] Deploy backend to a host with WebSocket + FFmpeg support — **live on Render (2026-07-12)**
+- [x] Set `NEXT_PUBLIC_BACKEND_URL` in Vercel to production backend URL — **confirmed by live Admin HQ (2026-07-12)**
+- [x] Wire agency management UI into **admin** — **production verified (2026-07-12)**; editor task view on `/dashboard` still pending
+- [ ] Wire editor task view into `/dashboard` — agency tasks API exists; editor-facing UI not production-verified
 - [ ] Seed `User` records in Prisma for existing Supabase auth users
 - [x] Verify legacy Supabase **P0** tables in new project (`video_comments`, `video_metadata`) — **local dev, 2026-07-03** via `supabase-p0-legacy-review-tables.sql`
 - [x] Apply **P1** `supabase-p1-comment-author-columns.sql` — **local dev, 2026-07-03** (production Supabase still pending)
-- [x] **Admin HQ client discovery migration (Phase 1)** — `GET /api/media/clients` + `fetchMediaClients()` — **implemented 2026-07-04**
-- [x] **Admin HQ init hang fix** — non-blocking client discovery + `finally` + 10s timeout — **implemented 2026-07-04; pending manual verify on `/admin`**
-- [x] **Admin HQ design restoration (Fix A)** — dark admin background — **implemented 2026-07-04**
-- [x] **Admin HQ comm + loading UX recovery** — embedded comm strip, `clientsLoading`, no full-page spinner — **implemented 2026-07-04; pending manual verify** — `admin-hq-design-regression-report.md`, `admin-hq-initialization-hang-trace.md`
-- [ ] **Admin HQ asset loading fix** — surface errors, gate empty state — report: `admin-hq-asset-loading-trace.md`
-- [ ] Verify legacy Supabase **P1** tables (`project_status`, `project_status_details`, `client_invoices`) — see `legacy-supabase-tables-migration-plan.md` / `supabase-p1-admin-legacy-tables.sql` — **blocks admin phase/billing/brief** (ADM-001)
+- [x] **Admin HQ client discovery migration (Phase 1)** — `GET /api/media/clients` + `fetchMediaClients()` — **production verified (2026-07-12)**
+- [x] **Admin HQ init hang fix** — non-blocking client discovery + `finally` + 10s timeout — **production verified (2026-07-12)**
+- [x] **Admin HQ design restoration (Fix A)** — dark admin background — **production verified (2026-07-12)**
+- [x] **Admin HQ comm + loading UX recovery** — embedded comm strip, `clientsLoading`, no full-page spinner — **production verified (2026-07-12)**
+- [x] **Admin HQ asset loading** — vault assets functional in operator QA — **production verified (2026-07-12)**; prior trace superseded
+- [x] Verify legacy Supabase **P1** tables (`project_status`, `project_status_details`, `client_invoices`) — **production verified (2026-07-12)** via Admin HQ phase/billing/brief flows
+- [x] **Admin client provisioning** — `6e37c64` — **production verified (2026-07-12)**
+- [x] **Admin HQ Phase 1A UI polish** — **production verified (2026-07-12)** — bundled in `34af1c8`
+- [x] **Admin HQ Phase 1B professional client list** — **production verified (2026-07-12)** — bundled in `34af1c8`
+- [x] **Client Overview Card** — **production verified (2026-07-12)** — bundled in `34af1c8`
+- [x] **Open Tasks KPI** — **production verified (2026-07-12)** — bundled in `34af1c8`
+- [x] **USD billing display migration** — **production verified (2026-07-12)** — `34af1c8`; display-only
+- [x] **Role assignment validation** — `650c2d7` — **production verified (2026-07-12)**
 - [x] **Operations core Phase 1 — WP1** — Prisma schema + migration — `operations-core-wp1-report.md`
-- [ ] **Operations core Phase 1 — WP2+** — **FROZEN** — resume after UI regression QA — `design-regression-freeze-audit.md`
+- [ ] **Operations core Phase 1 — WP2+** — **Pending** — WP1 complete; resume when explicitly approved
 - [ ] ~~Configure Supabase Storage bucket `client-vault` for Admin HQ~~ — **superseded** by client discovery migration (bucket not required for admin; legacy routes only)
-- [ ] **Admin dashboard HQ fixes** — P1 SQL first, then client discovery Phase 1 per `admin-client-discovery-migration-plan.md`
+- [x] **Admin dashboard HQ fixes** — client discovery, P1 tables, phase/billing/brief — **production verified (2026-07-12)**
 - [ ] **Timeline Sharing — Phase 2+** — implement per `timeline-sharing-production-readiness.md` (collaboration → agency → production); audit complete 2026-07-04
 - [ ] **Timeline Sharing (OTS / Live Editing Share) — Phase 1 manual verify** — two-browser Go Live test per `timeline-sharing-restoration-blueprint.md` §10
 - [x] **GlobalLiveWidget logged-out visitor flow** — logged-out "Talk to Rendorax" CTA opens existing `ContactForm` in a new `ContactModal` shell instead of redirecting to `/access`; `/access` login flow unchanged; dashboard live session (logged-in) unchanged — **implemented 2026-07-05; pending manual verify**
@@ -632,7 +696,7 @@ Each item appears **once**. Production-specific checks are in §14 unless listed
 - [ ] Remove or archive stale `rendorax-backend/schema.prisma` (root duplicate)
 - [ ] Remove orphaned `websocket/server.ts` or document its purpose
 - [ ] Add `vercel.json` if custom headers/rewrites needed
-- [ ] Add backend deployment config (Dockerfile or platform.toml)
+- [ ] Add backend deployment config (Dockerfile or platform.toml) — optional; Render already live without repo config
 - [ ] Update `.env.example` files with missing vars (`RESEND_API_KEY`, `NEXT_PUBLIC_R2_PUBLIC_URL`, Supabase V2 keys)
 - [ ] Migrate admin page from direct Supabase tables to Prisma agency models (optional, long-term)
 - [ ] **Timeline Sharing (OTS / Live Editing Share) — Phase 1** — unified `getReviewRoomId()` join contract; `timeline-sharing-restoration-blueprint.md`. **Implemented — pending manual verify (local).** Phase 2: comments in cinema + playhead sync.
@@ -716,6 +780,12 @@ When assisting with this project, keep these constraints in mind:
 
 | Date | Decision | Rationale |
 |------|----------|-----------|
+| 2026-07-12 | Production verification complete | Commit `34af1c8` deployed (Vercel success); Render backend healthy; operator Admin HQ live QA passed; no deployment issues |
+| 2026-07-12 | Admin HQ UI bundle shipped (`34af1c8`) | Phase 1A polish, Phase 1B client list, Client Overview Card, Open Tasks KPI, USD billing display; frontend-only change to `app/admin/page.tsx`; no backend/schema/API changes |
+| 2026-07-12 | Admin client provisioning complete (`6e37c64`) | Supabase admin user creation, `supabaseAdmin.ts`, `/api/agency/users`, admin UI; production-verified |
+| 2026-07-12 | Role assignment validation complete (`650c2d7`) | Project and task assignment role enforcement; production-verified |
+| 2026-07-12 | Partial thaw of July 4 design/UI freeze for Admin HQ | Admin recovery bundle committed, deployed, and live-verified; WP2+ and Timeline Sharing Phase 2+ remain gated |
+| 2026-07-12 | USD billing display migration (display-only) | `BDT`/`৳` labels replaced with `USD`/`$`; historical numeric values unchanged; no schema or handler changes |
 | 2026-07-04 | Admin HQ comm + loading UX recovery | Embedded `GlobalLiveWidget` + `ChatbotWidget` on admin; duplicate float suppressed; `clientsLoading` sidebar; spinner removed; build passing |
 | 2026-07-04 | Admin HQ design restoration Fix A+B | `bg-bg-body` on admin loading + main; initial widget hide superseded by comm recovery |
 | 2026-07-04 | Admin HQ design regression inspected | White canvas root cause documented; `admin-hq-design-regression-report.md` |

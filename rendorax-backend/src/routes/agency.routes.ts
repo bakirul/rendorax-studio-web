@@ -370,6 +370,40 @@ router.post("/tasks", async (req: AuthenticatedRequest, res: Response) => {
   }
 });
 
+const ALLOWED_TASK_STATUSES = new Set([
+  "todo",
+  "in_progress",
+  "in_review",
+  "done",
+]);
+
+const TASK_NEXT_STATUS: Record<string, string | null> = {
+  todo: "in_progress",
+  in_progress: "in_review",
+  in_review: "done",
+  done: null,
+};
+
+const taskResponseInclude = {
+  project: {
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      client: {
+        select: {
+          id: true,
+          displayName: true,
+          email: true,
+        },
+      },
+    },
+  },
+  assignee: {
+    select: { id: true, email: true, displayName: true, role: true },
+  },
+} satisfies Prisma.TaskInclude;
+
 router.get("/tasks", async (req: AuthenticatedRequest, res: Response) => {
   const actor = await requireAgencyUser(req, res);
   if (!actor) return;
@@ -395,10 +429,7 @@ router.get("/tasks", async (req: AuthenticatedRequest, res: Response) => {
     const tasks = await prisma.task.findMany({
       where,
       orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
-      include: {
-        project: { select: { id: true, title: true, status: true } },
-        assignee: { select: { id: true, email: true, displayName: true, role: true } },
-      },
+      include: taskResponseInclude,
     });
 
     res.json({ tasks, role });
@@ -407,13 +438,6 @@ router.get("/tasks", async (req: AuthenticatedRequest, res: Response) => {
     res.status(500).json({ error: "Failed to fetch tasks" });
   }
 });
-
-const ALLOWED_TASK_STATUSES = new Set([
-  "todo",
-  "in_progress",
-  "in_review",
-  "done",
-]);
 
 router.patch("/tasks/:id", async (req: AuthenticatedRequest, res: Response) => {
   const actor = await requireAgencyUser(req, res);
@@ -448,14 +472,21 @@ router.patch("/tasks/:id", async (req: AuthenticatedRequest, res: Response) => {
     return;
   }
 
+  if (!isAdminRole(req.user?.role)) {
+    const expectedNext = TASK_NEXT_STATUS[task.status];
+    if (!expectedNext || status !== expectedNext) {
+      res.status(400).json({
+        error: `Invalid status transition. Tasks in "${task.status}" can only advance to "${expectedNext ?? "none"}".`,
+      });
+      return;
+    }
+  }
+
   try {
     const updated = await prisma.task.update({
       where: { id: taskId },
       data: { status: status as Prisma.TaskUpdateInput["status"] },
-      include: {
-        project: { select: { id: true, title: true, status: true } },
-        assignee: { select: { id: true, email: true, displayName: true, role: true } },
-      },
+      include: taskResponseInclude,
     });
 
     res.json(updated);

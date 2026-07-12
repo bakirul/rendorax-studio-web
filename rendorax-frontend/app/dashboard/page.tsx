@@ -71,6 +71,48 @@ const setMediaBitrate = (sdp: string, bitrate: number) => {
   return lines.join('\r\n');
 };
 
+type EditorTaskStatus = "todo" | "in_progress" | "in_review" | "done";
+
+type EditorTask = {
+  id: string;
+  title: string;
+  description: string | null;
+  status: EditorTaskStatus;
+  dueDate: string | null;
+  assignee: {
+    id: string;
+    email: string;
+    displayName: string | null;
+    role: string;
+  } | null;
+  project: {
+    id: string;
+    title: string;
+    status: string;
+    client: {
+      id: string;
+      displayName: string | null;
+      email: string;
+    } | null;
+  } | null;
+};
+
+const TASK_NEXT_STATUS: Record<EditorTaskStatus, EditorTaskStatus | null> = {
+  todo: "in_progress",
+  in_progress: "in_review",
+  in_review: "done",
+  done: null,
+};
+
+const TASK_STATUS_ACTION_LABELS: Record<
+  Exclude<EditorTaskStatus, "done">,
+  string
+> = {
+  todo: "Start Work",
+  in_progress: "Send to Review",
+  in_review: "Mark Complete",
+};
+
 export default function DashboardPage() {
   const supabase = createClient();
   const [user, setUser] = useState<any>(null);
@@ -256,8 +298,10 @@ export default function DashboardPage() {
   const [isLocking, setIsLocking] = useState(false);
 
   // Assigned Tasks (Operations Core — Step 4)
-  const [editorTasks, setEditorTasks] = useState<any[]>([]);
+  const [editorTasks, setEditorTasks] = useState<EditorTask[]>([]);
   const [editorTasksLoading, setEditorTasksLoading] = useState(false);
+  const [editorTasksFetchError, setEditorTasksFetchError] = useState<string | null>(null);
+  const [taskUpdateError, setTaskUpdateError] = useState<string | null>(null);
   const [isTaskPanelExpanded, setIsTaskPanelExpanded] = useState(false);
   const [taskStatusUpdating, setTaskStatusUpdating] = useState<string | null>(null);
   const taskStatusLabels: Record<string, string> = {
@@ -623,19 +667,28 @@ export default function DashboardPage() {
   }, [setIsSidebarOpen]);
 
   const loadEditorTasks = useCallback(async () => {
+    setEditorTasksFetchError(null);
     setEditorTasksLoading(true);
     try {
       const res = await fetch("/api/agency/tasks");
       const data = await res.json();
-      if (data.tasks) setEditorTasks(data.tasks);
+      if (!res.ok) {
+        setEditorTasksFetchError(data.error || "Failed to load assigned tasks");
+        return;
+      }
+      if (Array.isArray(data.tasks)) {
+        setEditorTasks(data.tasks);
+      }
     } catch {
+      setEditorTasksFetchError("Failed to load assigned tasks");
       console.error("Failed to load assigned tasks");
     } finally {
       setEditorTasksLoading(false);
     }
   }, []);
 
-  const updateTaskStatus = useCallback(async (taskId: string, status: string) => {
+  const updateTaskStatus = useCallback(async (taskId: string, status: EditorTaskStatus) => {
+    setTaskUpdateError(null);
     setTaskStatusUpdating(taskId);
     try {
       const res = await fetch("/api/agency/tasks", {
@@ -643,18 +696,30 @@ export default function DashboardPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ taskId, status }),
       });
-      if (res.ok) {
-        const updated = await res.json();
-        setEditorTasks((prev) =>
-          prev.map((t) => (t.id === taskId ? { ...t, ...updated } : t)),
-        );
+      const updated = await res.json();
+      if (!res.ok) {
+        setTaskUpdateError(updated.error || "Failed to update task status");
+        return;
       }
+      setEditorTasks((prev) =>
+        prev.map((t) => (t.id === taskId ? { ...t, ...updated } : t)),
+      );
     } catch {
+      setTaskUpdateError("Failed to update task status");
       console.error("Failed to update task status");
     } finally {
       setTaskStatusUpdating(null);
     }
   }, []);
+
+  const advanceTaskStatus = useCallback(
+    (task: EditorTask) => {
+      const nextStatus = TASK_NEXT_STATUS[task.status];
+      if (!nextStatus) return;
+      void updateTaskStatus(task.id, nextStatus);
+    },
+    [updateTaskStatus],
+  );
 
   // User Auth Initializer & Strict RBAC
   useEffect(() => {
@@ -1400,6 +1465,16 @@ export default function DashboardPage() {
 
           {isTaskPanelExpanded && (
             <div className="px-6 pb-4 max-h-[240px] overflow-y-auto custom-scrollbar">
+              {editorTasksFetchError ? (
+                <p className="py-2 text-[10px] text-red-400 border border-red-500/20 bg-red-500/5 px-3">
+                  {editorTasksFetchError}
+                </p>
+              ) : null}
+              {taskUpdateError ? (
+                <p className="py-2 mb-2 text-[10px] text-red-400 border border-red-500/20 bg-red-500/5 px-3">
+                  {taskUpdateError}
+                </p>
+              ) : null}
               {editorTasksLoading ? (
                 <p className="text-center py-4 text-[#d4af37] text-[10px] uppercase tracking-widest">
                   Loading tasks...
@@ -1410,57 +1485,77 @@ export default function DashboardPage() {
                 </p>
               ) : (
                 <ul className="space-y-2">
-                  {editorTasks.map((task: any) => (
-                    <li
-                      key={task.id}
-                      className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-3 border border-white/5 bg-[#121217] gap-2"
-                    >
-                      <div className="min-w-0">
-                        <p className="text-gray-200 text-xs font-medium truncate">
-                          {task.title}
-                        </p>
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
-                          {task.project && (
-                            <span className="text-[9px] uppercase tracking-widest text-gray-500">
-                              {task.project.title}
-                            </span>
-                          )}
-                          {task.assignee && (
-                            <span className="text-[9px] uppercase tracking-widest text-gray-500">
-                              {task.assignee.displayName || task.assignee.email}
-                            </span>
-                          )}
-                          {task.dueDate && (
-                            <span className="text-[9px] uppercase tracking-widest text-gray-500">
-                              Due {new Date(task.dueDate).toLocaleDateString()}
+                  {editorTasks.map((task) => {
+                    const nextStatus = TASK_NEXT_STATUS[task.status];
+                    const statusBadgeClass =
+                      task.status === "done"
+                        ? "border-green-500/30 bg-green-500/10 text-green-400"
+                        : task.status === "in_review"
+                          ? "border-blue-500/30 bg-blue-500/10 text-blue-400"
+                          : task.status === "in_progress"
+                            ? "border-[#d4af37]/30 bg-[#d4af37]/10 text-[#d4af37]"
+                            : "border-white/10 bg-white/5 text-gray-400";
+                    const clientLabel =
+                      task.project?.client?.displayName ||
+                      task.project?.client?.email ||
+                      null;
+
+                    return (
+                      <li
+                        key={task.id}
+                        className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-3 border border-white/5 bg-[#121217] gap-2"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="text-gray-200 text-xs font-medium truncate">
+                            {task.title}
+                          </p>
+                          {task.description ? (
+                            <p className="text-[10px] text-gray-500 mt-1 line-clamp-2">
+                              {task.description}
+                            </p>
+                          ) : null}
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+                            {task.project ? (
+                              <span className="text-[9px] uppercase tracking-widest text-gray-500">
+                                {task.project.title}
+                              </span>
+                            ) : null}
+                            {clientLabel ? (
+                              <span className="text-[9px] uppercase tracking-widest text-gray-500">
+                                {clientLabel}
+                              </span>
+                            ) : null}
+                            {task.dueDate ? (
+                              <span className="text-[9px] uppercase tracking-widest text-gray-500">
+                                Due {new Date(task.dueDate).toLocaleDateString()}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span
+                            className={`text-[9px] uppercase tracking-widest px-2 py-1 border font-bold ${statusBadgeClass}`}
+                          >
+                            {taskStatusLabels[task.status] || task.status}
+                          </span>
+                          {nextStatus ? (
+                            <button
+                              type="button"
+                              disabled={taskStatusUpdating === task.id}
+                              onClick={() => advanceTaskStatus(task)}
+                              className="text-[9px] uppercase tracking-widest px-2 py-1 border border-[#d4af37]/30 bg-[#d4af37]/10 text-[#d4af37] hover:bg-[#d4af37]/20 transition-colors disabled:opacity-50"
+                            >
+                              {TASK_STATUS_ACTION_LABELS[task.status]}
+                            </button>
+                          ) : (
+                            <span className="text-[9px] uppercase tracking-widest text-green-400">
+                              Completed
                             </span>
                           )}
                         </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <select
-                          value={task.status}
-                          disabled={taskStatusUpdating === task.id}
-                          onChange={(e) => updateTaskStatus(task.id, e.target.value)}
-                          className={`text-[9px] uppercase tracking-widest px-2 py-1 border outline-none font-bold cursor-pointer disabled:opacity-50 ${
-                            task.status === "done"
-                              ? "border-green-500/30 bg-green-500/10 text-green-400"
-                              : task.status === "in_review"
-                                ? "border-blue-500/30 bg-blue-500/10 text-blue-400"
-                                : task.status === "in_progress"
-                                  ? "border-[#d4af37]/30 bg-[#d4af37]/10 text-[#d4af37]"
-                                  : "border-white/10 bg-white/5 text-gray-400"
-                          }`}
-                        >
-                          {Object.keys(taskStatusLabels).map((s) => (
-                            <option key={s} value={s}>
-                              {taskStatusLabels[s]}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </li>
-                  ))}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>
