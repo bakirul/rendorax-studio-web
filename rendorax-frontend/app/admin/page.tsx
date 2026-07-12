@@ -63,10 +63,40 @@ function buildMergedClientList(
     }
   }
 
-  return Array.from(byId.values()).sort((a, b) =>
-    getClientPrimaryLabel(a).localeCompare(getClientPrimaryLabel(b), undefined, {
-      sensitivity: "base",
-    }),
+  return Array.from(byId.values()).sort(compareSidebarClients);
+}
+
+function getClientSortTier(client: SidebarClientRow): number {
+  if (client.displayName?.trim()) return 0;
+  if (client.email?.trim()) return 1;
+  return 2;
+}
+
+function compareSidebarClients(a: SidebarClientRow, b: SidebarClientRow): number {
+  const tierDiff = getClientSortTier(a) - getClientSortTier(b);
+  if (tierDiff !== 0) return tierDiff;
+
+  return getClientPrimaryLabel(a).localeCompare(getClientPrimaryLabel(b), undefined, {
+    sensitivity: "base",
+  });
+}
+
+function isActiveClient(client: SidebarClientRow): boolean {
+  return Boolean(client.displayName?.trim() || client.email?.trim());
+}
+
+function isLegacyClient(client: SidebarClientRow): boolean {
+  return !isActiveClient(client);
+}
+
+function matchesClientSearch(client: SidebarClientRow, query: string): boolean {
+  const primary = getClientPrimaryLabel(client).toLowerCase();
+  const secondary = getClientSecondaryLabel(client)?.toLowerCase() ?? "";
+  const id = client.id.toLowerCase();
+  return (
+    primary.includes(query) ||
+    secondary.includes(query) ||
+    id.includes(query)
   );
 }
 
@@ -137,6 +167,8 @@ export default function AdminPortal() {
   const [agencyUsers, setAgencyUsers] = useState<any[]>([]);
   const [showClientForm, setShowClientForm] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [clientSearchQuery, setClientSearchQuery] = useState("");
+  const [clientFilter, setClientFilter] = useState<"all" | "active" | "legacy">("all");
   const [newClient, setNewClient] = useState({
     displayName: "",
     email: "",
@@ -591,7 +623,157 @@ export default function AdminPortal() {
     () => buildMergedClientList(agencyUsers, clients),
     [agencyUsers, clients],
   );
+  const sidebarClientGroups = useMemo(() => {
+    const query = clientSearchQuery.trim().toLowerCase();
+
+    let scoped = mergedClients;
+    if (clientFilter === "active") {
+      scoped = scoped.filter(isActiveClient);
+    } else if (clientFilter === "legacy") {
+      scoped = scoped.filter(isLegacyClient);
+    }
+
+    const searched = query
+      ? scoped.filter((client) => matchesClientSearch(client, query))
+      : scoped;
+
+    const active = searched.filter(isActiveClient);
+    const legacy = searched.filter(isLegacyClient);
+
+    return {
+      active,
+      legacy,
+      total: searched.length,
+      showLegacyDivider:
+        clientFilter === "all" && active.length > 0 && legacy.length > 0,
+      entries: [
+        ...active.map((client) => ({ type: "client" as const, client })),
+        ...(clientFilter === "all" && active.length > 0 && legacy.length > 0
+          ? [{ type: "divider" as const }]
+          : []),
+        ...legacy.map((client) => ({ type: "client" as const, client })),
+      ],
+    };
+  }, [mergedClients, clientSearchQuery, clientFilter]);
+  const openTasksCount = useMemo(
+    () => tasks.filter((task: any) => task.status !== "done").length,
+    [tasks],
+  );
   const selectedClientRow = mergedClients.find((c) => c.id === selectedClient) ?? null;
+  const selectedClientOverview = useMemo(() => {
+    if (!selectedClient) return null;
+
+    const clientProjects = projects.filter(
+      (project: any) =>
+        project.clientId === selectedClient || project.client?.id === selectedClient,
+    );
+    const clientProjectIds = new Set(clientProjects.map((project: any) => project.id));
+    const clientTasks = tasks.filter(
+      (task: any) =>
+        clientProjectIds.has(task.projectId) ||
+        clientProjectIds.has(task.project?.id),
+    );
+
+    const openTasks = clientTasks.filter((task: any) => task.status !== "done").length;
+    const completedTasks = clientTasks.filter((task: any) => task.status === "done").length;
+
+    const unpaidInvoices = filesLoading
+      ? []
+      : clientInvoices.filter((invoice: any) => invoice.status === "Unpaid");
+    const unpaidTotal = unpaidInvoices.reduce(
+      (sum: number, invoice: any) => sum + Number(invoice.amount || 0),
+      0,
+    );
+
+    const activityCandidates: Array<{ at: number; label: string }> = [];
+
+    for (const project of clientProjects) {
+      for (const value of [project.updatedAt, project.createdAt]) {
+        const at = value ? new Date(value).getTime() : NaN;
+        if (!Number.isNaN(at)) {
+          activityCandidates.push({ at, label: "project update" });
+        }
+      }
+    }
+
+    for (const task of clientTasks) {
+      for (const value of [task.updatedAt, task.createdAt]) {
+        const at = value ? new Date(value).getTime() : NaN;
+        if (!Number.isNaN(at)) {
+          activityCandidates.push({ at, label: "task update" });
+        }
+      }
+    }
+
+    if (!filesLoading) {
+      for (const asset of clientAssets) {
+        for (const value of [asset.updatedAt, asset.createdAt]) {
+          const at = value ? new Date(value).getTime() : NaN;
+          if (!Number.isNaN(at)) {
+            activityCandidates.push({ at, label: "vault activity" });
+          }
+        }
+      }
+
+      for (const invoice of clientInvoices) {
+        const at = invoice.created_at
+          ? new Date(invoice.created_at).getTime()
+          : NaN;
+        if (!Number.isNaN(at)) {
+          activityCandidates.push({ at, label: "billing activity" });
+        }
+      }
+
+      if (clientBrief?.updated_at) {
+        const at = new Date(clientBrief.updated_at).getTime();
+        if (!Number.isNaN(at)) {
+          activityCandidates.push({ at, label: "brief update" });
+        }
+      }
+    }
+
+    const lastActivityCandidate =
+      activityCandidates.length > 0
+        ? activityCandidates.reduce((latest, candidate) =>
+            candidate.at >= latest.at ? candidate : latest,
+          )
+        : null;
+    const lastActivity = lastActivityCandidate
+      ? {
+          date: new Date(lastActivityCandidate.at),
+          label: lastActivityCandidate.label,
+        }
+      : null;
+
+    return {
+      projectCount: clientProjects.length,
+      openTasks,
+      completedTasks,
+      assetCount: filesLoading ? null : clientAssets.length,
+      invoiceCount: filesLoading ? null : clientInvoices.length,
+      unpaidInvoiceCount: filesLoading ? null : unpaidInvoices.length,
+      unpaidTotal: filesLoading ? null : unpaidTotal,
+      currentPhase: currentStatus,
+      lastActivity,
+      isLegacy: selectedClientRow ? isLegacyClient(selectedClientRow) : false,
+      primaryLabel: selectedClientRow
+        ? getClientPrimaryLabel(selectedClientRow)
+        : `${selectedClient.substring(0, 8)}...`,
+      secondaryLabel: selectedClientRow
+        ? getClientSecondaryLabel(selectedClientRow)
+        : null,
+    };
+  }, [
+    selectedClient,
+    selectedClientRow,
+    projects,
+    tasks,
+    clientAssets,
+    clientInvoices,
+    clientBrief,
+    currentStatus,
+    filesLoading,
+  ]);
 
   return (
     <main className="min-h-screen bg-bg-body text-text-gray font-main p-6 md:p-10 relative flex justify-center items-start">
@@ -635,8 +817,10 @@ export default function AdminPortal() {
             <p className="text-2xl font-display text-text-white">{editorUsers.length || "—"}</p>
           </div>
           <div className="bg-bg-panel border border-white/5 p-4">
-            <p className="text-[10px] uppercase tracking-widest text-text-gray mb-1">Status</p>
-            <p className="text-sm font-medium text-green-400 mt-1">Operational</p>
+            <p className="text-[10px] uppercase tracking-widest text-text-gray mb-1">Open Tasks</p>
+            <p className="text-2xl font-display text-text-white">
+              {tasksLoading ? "—" : openTasksCount}
+            </p>
           </div>
         </div>
 
@@ -750,42 +934,183 @@ export default function AdminPortal() {
                 </form>
               )}
 
-              {clientsLoading && mergedClients.length === 0 ? (
-                <p className="text-center py-6 text-gold-primary text-xs uppercase tracking-widest">
-                  Scanning...
-                </p>
-              ) : mergedClients.length === 0 ? (
-                <p className="text-center py-6 text-text-gray italic text-xs">
-                  No clients found.
-                </p>
-              ) : (
-                <ul className="space-y-2">
-                  {mergedClients.map((client) => {
-                    const primaryLabel = getClientPrimaryLabel(client);
-                    const secondaryLabel = getClientSecondaryLabel(client);
+              {mergedClients.length > 0 && (
+                <div className="mb-4 space-y-3">
+                  <div>
+                    <label className="sr-only" htmlFor="client-filter">
+                      Filter clients
+                    </label>
+                    <select
+                      id="client-filter"
+                      value={clientFilter}
+                      onChange={(e) =>
+                        setClientFilter(e.target.value as "all" | "active" | "legacy")
+                      }
+                      className="w-full bg-bg-body border border-white/10 p-2.5 text-sm text-white focus:border-gold-primary outline-none"
+                    >
+                      <option value="all">All Clients</option>
+                      <option value="active">Active Clients</option>
+                      <option value="legacy">Legacy Clients</option>
+                    </select>
+                  </div>
+                  <div className="relative">
+                    <label className="sr-only" htmlFor="client-search">
+                      Search clients
+                    </label>
+                    <input
+                      id="client-search"
+                      type="search"
+                      placeholder="Search by name, email, or ID..."
+                      value={clientSearchQuery}
+                      onChange={(e) => setClientSearchQuery(e.target.value)}
+                      className="w-full bg-bg-body border border-white/10 p-2.5 pr-9 text-sm text-white placeholder:text-text-gray/60 focus:border-gold-primary outline-none"
+                    />
+                    {clientSearchQuery ? (
+                      <button
+                        type="button"
+                        onClick={() => setClientSearchQuery("")}
+                        aria-label="Clear search"
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 px-1.5 text-text-gray hover:text-gold-primary transition-colors text-sm"
+                      >
+                        ×
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              )}
 
-                    return (
-                      <li key={client.id}>
-                        <button
-                          type="button"
-                          onClick={() => fetchClientData(client.id)}
-                          className={`w-full text-left p-3 text-xs transition-all border ${selectedClient === client.id ? "bg-gold-primary/10 border-gold-primary text-gold-primary" : "bg-bg-body border-white/5 text-text-gray hover:border-white/20"}`}
-                        >
-                          <span
-                            className={`block truncate ${secondaryLabel ? "text-white font-medium" : "font-mono"}`}
+              {clientsLoading && mergedClients.length === 0 ? (
+                <div className="text-center py-6">
+                  <p className="text-gold-primary text-xs uppercase tracking-widest">
+                    Loading clients...
+                  </p>
+                </div>
+              ) : mergedClients.length === 0 ? (
+                <div className="text-center py-6">
+                  <p className="text-text-gray text-xs">No clients yet.</p>
+                  <p className="text-text-gray/50 text-[10px] mt-2 mb-4">
+                    Add a client to start managing operations.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowClientForm(true)}
+                    className="text-[10px] bg-gold-primary/10 text-gold-primary border border-gold-primary/30 px-3 py-1.5 uppercase tracking-widest hover:bg-gold-primary hover:text-black transition-colors"
+                  >
+                    + Add Client
+                  </button>
+                </div>
+              ) : sidebarClientGroups.total === 0 ? (
+                <div className="text-center py-6">
+                  {clientSearchQuery.trim() ? (
+                    <>
+                      <p className="text-text-gray text-xs">
+                        No clients match &ldquo;{clientSearchQuery.trim()}&rdquo;
+                      </p>
+                      <p className="text-text-gray/50 text-[10px] mt-2 mb-4">
+                        Try another name, email, or client ID.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setClientSearchQuery("")}
+                        className="text-[10px] text-gold-primary border border-gold-primary/30 px-3 py-1.5 uppercase tracking-widest hover:bg-gold-primary/10 transition-colors"
+                      >
+                        Clear search
+                      </button>
+                    </>
+                  ) : clientFilter === "active" ? (
+                    <>
+                      <p className="text-text-gray text-xs">No active clients yet.</p>
+                      <p className="text-text-gray/50 text-[10px] mt-2 mb-4">
+                        Provision a client with a name or email to see them here.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setShowClientForm(true)}
+                        className="text-[10px] bg-gold-primary/10 text-gold-primary border border-gold-primary/30 px-3 py-1.5 uppercase tracking-widest hover:bg-gold-primary hover:text-black transition-colors"
+                      >
+                        + Add Client
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-text-gray text-xs">No legacy clients found.</p>
+                      <p className="text-text-gray/50 text-[10px] mt-2 mb-4">
+                        Legacy clients are asset-only records without a name or email.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setClientFilter("all")}
+                        className="text-[10px] text-gold-primary border border-gold-primary/30 px-3 py-1.5 uppercase tracking-widest hover:bg-gold-primary/10 transition-colors"
+                      >
+                        Show all clients
+                      </button>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div className="max-h-72 overflow-y-auto pr-1">
+                  <ul className="space-y-2">
+                    {sidebarClientGroups.entries.map((entry) => {
+                      if (entry.type === "divider") {
+                        return (
+                          <li key="legacy-divider" className="py-1">
+                            <div className="flex items-center gap-2 text-[9px] uppercase tracking-[0.2em] text-text-gray/60">
+                              <span className="flex-1 border-t border-white/10" />
+                              <span>Legacy Clients</span>
+                              <span className="flex-1 border-t border-white/10" />
+                            </div>
+                          </li>
+                        );
+                      }
+
+                      const client = entry.client;
+                      const primaryLabel = getClientPrimaryLabel(client);
+                      const secondaryLabel = getClientSecondaryLabel(client);
+                      const isLegacy = isLegacyClient(client);
+
+                      return (
+                        <li key={client.id}>
+                          <button
+                            type="button"
+                            onClick={() => fetchClientData(client.id)}
+                            className={`w-full text-left p-3 text-xs transition-all border ${selectedClient === client.id ? "bg-gold-primary/10 border-gold-primary text-gold-primary" : "bg-bg-body border-white/5 text-text-gray hover:border-white/20"}`}
                           >
-                            {primaryLabel}
-                          </span>
-                          {secondaryLabel ? (
-                            <span className="block truncate text-[10px] text-text-gray/80 mt-1">
-                              {secondaryLabel}
-                            </span>
-                          ) : null}
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0 flex-1">
+                                <span
+                                  className={`block truncate ${isLegacy ? "font-mono text-text-gray" : "text-white font-medium"}`}
+                                >
+                                  {primaryLabel}
+                                </span>
+                                {secondaryLabel ? (
+                                  <span className="block truncate text-[10px] text-text-gray/80 mt-1">
+                                    {secondaryLabel}
+                                  </span>
+                                ) : isLegacy ? (
+                                  <span className="block truncate text-[10px] text-text-gray/50 mt-1 font-mono">
+                                    {client.id}
+                                  </span>
+                                ) : null}
+                              </div>
+                              {typeof client.assetCount === "number" ? (
+                                <span
+                                  className={`shrink-0 text-[9px] uppercase tracking-widest px-2 py-0.5 border ${
+                                    selectedClient === client.id
+                                      ? "border-gold-primary/40 bg-gold-primary/10 text-gold-primary"
+                                      : "border-white/10 bg-black/20 text-text-gray"
+                                  }`}
+                                >
+                                  {client.assetCount} asset
+                                  {client.assetCount === 1 ? "" : "s"}
+                                </span>
+                              ) : null}
+                            </div>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
               )}
             </div>
 
@@ -878,8 +1203,17 @@ export default function AdminPortal() {
                   </p>
                 ) : projects.length === 0 ? (
                   <div className="text-center py-10">
-                    <p className="text-text-gray text-xs italic">No projects yet.</p>
-                    <p className="text-text-gray/50 text-[10px] mt-2">Create your first project to start managing production.</p>
+                    <p className="text-text-gray text-xs">No projects yet.</p>
+                    <p className="text-text-gray/50 text-[10px] mt-2 mb-4">
+                      Create your first project to start managing production.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowProjectForm(true)}
+                      className="text-[10px] bg-gold-primary/10 text-gold-primary border border-gold-primary/30 px-3 py-1.5 uppercase tracking-widest hover:bg-gold-primary hover:text-black transition-colors"
+                    >
+                      + New Project
+                    </button>
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -1102,8 +1436,12 @@ export default function AdminPortal() {
             <section>
               {!selectedClient ? (
                 <div className="bg-bg-panel border border-white/5 p-10 text-center">
-                  <p className="text-text-gray text-xs uppercase tracking-widest">Select a client from the sidebar</p>
-                  <p className="text-text-gray/50 text-[10px] mt-2">View phase control, billing, brief, and vault assets for a specific client.</p>
+                  <p className="text-text-gray text-xs uppercase tracking-widest">
+                    Select a client from the sidebar
+                  </p>
+                  <p className="text-text-gray/50 text-[10px] mt-2">
+                    Choose a client to manage phase control, billing, brief, and vault assets.
+                  </p>
                 </div>
               ) : (
                 <div className="flex flex-col gap-6">
@@ -1116,6 +1454,127 @@ export default function AdminPortal() {
                         : `${selectedClient?.substring(0, 8)}...`}
                     </h3>
                   </div>
+
+                  {/* Client Overview */}
+                  {selectedClientOverview && (
+                    <div className="bg-bg-panel border border-white/5 p-6">
+                      <h3 className="text-sm uppercase tracking-widest text-gold-primary mb-4 border-b border-white/10 pb-3">
+                        Client Overview
+                      </h3>
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-5">
+                        <div className="min-w-0">
+                          <p className="text-white text-lg font-medium truncate">
+                            {selectedClientOverview.primaryLabel}
+                          </p>
+                          {selectedClientOverview.secondaryLabel ? (
+                            <p className="text-text-gray text-sm mt-1 truncate">
+                              {selectedClientOverview.secondaryLabel}
+                            </p>
+                          ) : selectedClientRow?.email ? (
+                            <p className="text-text-gray text-sm mt-1 truncate">
+                              {selectedClientRow.email}
+                            </p>
+                          ) : null}
+                        </div>
+                        <span
+                          className={`shrink-0 self-start text-[9px] uppercase tracking-widest px-2.5 py-1 border ${
+                            selectedClientOverview.isLegacy
+                              ? "border-white/10 bg-black/20 text-text-gray"
+                              : "border-gold-primary/30 bg-gold-primary/10 text-gold-primary"
+                          }`}
+                        >
+                          {selectedClientOverview.isLegacy
+                            ? "Legacy Client"
+                            : "Active Client"}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
+                        <div className="bg-bg-body border border-white/5 p-3">
+                          <p className="text-[9px] uppercase tracking-widest text-text-gray mb-1">
+                            Projects
+                          </p>
+                          <p className="text-lg font-display text-text-white">
+                            {selectedClientOverview.projectCount}
+                          </p>
+                        </div>
+                        <div className="bg-bg-body border border-white/5 p-3">
+                          <p className="text-[9px] uppercase tracking-widest text-text-gray mb-1">
+                            Open Tasks
+                          </p>
+                          <p className="text-lg font-display text-text-white">
+                            {selectedClientOverview.openTasks}
+                          </p>
+                        </div>
+                        <div className="bg-bg-body border border-white/5 p-3">
+                          <p className="text-[9px] uppercase tracking-widest text-text-gray mb-1">
+                            Completed Tasks
+                          </p>
+                          <p className="text-lg font-display text-text-white">
+                            {selectedClientOverview.completedTasks}
+                          </p>
+                        </div>
+                        <div className="bg-bg-body border border-white/5 p-3">
+                          <p className="text-[9px] uppercase tracking-widest text-text-gray mb-1">
+                            Assets
+                          </p>
+                          <p className="text-lg font-display text-text-white">
+                            {selectedClientOverview.assetCount ?? "—"}
+                          </p>
+                        </div>
+                        <div className="bg-bg-body border border-white/5 p-3">
+                          <p className="text-[9px] uppercase tracking-widest text-text-gray mb-1">
+                            Invoices
+                          </p>
+                          <p className="text-lg font-display text-text-white">
+                            {selectedClientOverview.invoiceCount ?? "—"}
+                          </p>
+                        </div>
+                        <div className="bg-bg-body border border-white/5 p-3">
+                          <p className="text-[9px] uppercase tracking-widest text-text-gray mb-1">
+                            Unpaid
+                          </p>
+                          <p className="text-lg font-display text-gold-primary">
+                            {selectedClientOverview.unpaidInvoiceCount === null
+                              ? "—"
+                              : `$ ${selectedClientOverview.unpaidTotal?.toLocaleString()}`}
+                          </p>
+                          {selectedClientOverview.unpaidInvoiceCount !== null &&
+                          selectedClientOverview.unpaidInvoiceCount > 0 ? (
+                            <p className="text-[9px] text-text-gray mt-1">
+                              {selectedClientOverview.unpaidInvoiceCount} invoice
+                              {selectedClientOverview.unpaidInvoiceCount === 1
+                                ? ""
+                                : "s"}
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <p className="text-[10px] uppercase tracking-widest text-text-gray mb-1">
+                            Current Phase
+                          </p>
+                          <p className="text-white font-medium">
+                            {selectedClientOverview.currentPhase}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase tracking-widest text-text-gray mb-1">
+                            Last Activity
+                          </p>
+                          <p className="text-white font-medium">
+                            {filesLoading
+                              ? "Loading..."
+                              : selectedClientOverview.lastActivity
+                                ? `${selectedClientOverview.lastActivity.date.toLocaleDateString()} — ${selectedClientOverview.lastActivity.label}`
+                                : "No activity yet"}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Phase Control */}
                   <div className="bg-bg-panel border border-white/5 p-6">
@@ -1203,12 +1662,12 @@ export default function AdminPortal() {
                           </div>
                           <div className="md:col-span-2">
                             <label className="block text-[10px] uppercase tracking-widest text-text-gray mb-2">
-                              Total Amount (BDT)
+                              Total Amount (USD)
                             </label>
                             <input
                               required
                               type="number"
-                              placeholder="e.g. 15000"
+                              placeholder="e.g. 1500"
                               value={newInvoice.amount}
                               onChange={(e) =>
                                 setNewInvoice({
@@ -1252,7 +1711,7 @@ export default function AdminPortal() {
                                 Due: {new Date(inv.due_date).toLocaleDateString()} •
                                 Amount:{" "}
                                 <span className="text-gold-primary font-bold text-sm ml-1">
-                                  ৳ {inv.amount}
+                                  $ {Number(inv.amount).toLocaleString()}
                                 </span>
                               </p>
                             </div>
