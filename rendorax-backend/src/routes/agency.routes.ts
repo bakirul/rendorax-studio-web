@@ -258,7 +258,7 @@ router.post("/projects", async (req: AuthenticatedRequest, res: Response) => {
         title: title.trim(),
         description:
           typeof description === "string" ? description.trim() || null : null,
-        status: typeof status === "string" && status.trim() ? status.trim() : "active",
+        status: typeof status === "string" && status.trim() ? status.trim() : "Awaiting Assets",
         ownerId: actor.id,
         clientId:
           typeof clientId === "string" && clientId.trim() ? clientId.trim() : null,
@@ -273,6 +273,90 @@ router.post("/projects", async (req: AuthenticatedRequest, res: Response) => {
   } catch (error) {
     console.error("Failed to create agency project:", error);
     res.status(500).json({ error: "Failed to create project" });
+  }
+});
+
+const ALLOWED_PROJECT_STATUSES = new Set([
+  "Awaiting Assets",
+  "Ingesting",
+  "Offline Edit",
+  "Color Grading",
+  "Audio & Master",
+  "Ready for Review",
+]);
+
+const projectResponseInclude = {
+  owner: { select: { id: true, email: true, displayName: true, role: true } },
+  client: { select: { id: true, email: true, displayName: true, role: true } },
+  _count: { select: { tasks: true, assets: true } },
+} satisfies Prisma.AgencyProjectInclude;
+
+router.patch("/projects/:id", async (req: AuthenticatedRequest, res: Response) => {
+  const actor = await requireAgencyUser(req, res);
+  if (!actor) return;
+
+  const role = mapSupabaseRoleToAgencyRole(req.user?.role);
+  if (role === "client") {
+    res.status(403).json({ error: "Clients cannot update project status" });
+    return;
+  }
+
+  const projectId = String(req.params.id).trim();
+  const { status } = req.body ?? {};
+
+  if (typeof status !== "string" || !status.trim()) {
+    res.status(400).json({ error: "status is required" });
+    return;
+  }
+
+  const nextStatus = status.trim();
+  if (!ALLOWED_PROJECT_STATUSES.has(nextStatus)) {
+    res.status(400).json({
+      error:
+        "status must be one of: Awaiting Assets, Ingesting, Offline Edit, Color Grading, Audio & Master, Ready for Review",
+    });
+    return;
+  }
+
+  const prisma = getPrisma(req);
+  const project = await prisma.agencyProject.findUnique({
+    where: { id: projectId },
+  });
+
+  if (!project) {
+    res.status(404).json({ error: "Project not found" });
+    return;
+  }
+
+  if (!isAdminRole(req.user?.role)) {
+    const isOwner = project.ownerId === actor.id;
+    let hasAssignedTask = false;
+
+    if (!isOwner) {
+      const assignedTask = await prisma.task.findFirst({
+        where: { projectId: project.id, assigneeId: actor.id },
+        select: { id: true },
+      });
+      hasAssignedTask = assignedTask !== null;
+    }
+
+    if (!isOwner && !hasAssignedTask) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+  }
+
+  try {
+    const updated = await prisma.agencyProject.update({
+      where: { id: projectId },
+      data: { status: nextStatus },
+      include: projectResponseInclude,
+    });
+
+    res.json(updated);
+  } catch (error) {
+    console.error("Failed to update project status:", error);
+    res.status(500).json({ error: "Failed to update project status" });
   }
 });
 
@@ -314,7 +398,7 @@ router.post("/tasks", async (req: AuthenticatedRequest, res: Response) => {
     return;
   }
 
-  if (!isAdminRole(req.user?.role) && project.ownerId !== actor.id) {
+  if (role !== "admin" && project.ownerId !== actor.id) {
     res.status(403).json({ error: "You can only add tasks to projects you own" });
     return;
   }

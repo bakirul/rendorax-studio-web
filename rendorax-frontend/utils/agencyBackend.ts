@@ -9,12 +9,22 @@ type BackendAuthHeadersResult =
 
 export async function getBackendAuthHeaders(): Promise<BackendAuthHeadersResult> {
   const supabase = createClient();
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    return { ok: false as const, status: 401, error: "Unauthorized" };
+  }
+
   const {
     data: { session },
-    error,
+    error: sessionError,
   } = await supabase.auth.getSession();
 
-  if (error || !session?.access_token) {
+  if (sessionError || !session?.access_token) {
     return { ok: false as const, status: 401, error: "Unauthorized" };
   }
 

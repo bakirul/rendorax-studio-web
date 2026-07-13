@@ -470,12 +470,20 @@ router.get("/assets", async (req: AuthenticatedRequest, res: Response) => {
     let where: Prisma.MediaAssetWhereInput;
 
     if (isClientUser(req)) {
-      // Clients only see assets linked to a project where they are the client.
-      // Unlinked assets and assets tied to unrelated/other-client projects are excluded,
-      // regardless of who uploaded them (e.g. an editor's deliverable is visible here).
+      // Clients see (A) deliverables linked to their projects and (B) their own
+      // unlinked staging uploads before a project exists. Other clients' assets,
+      // unrelated projects, and editor-owned unlinked assets stay excluded.
       where = {
-        agencyProjectId: { not: null },
-        agencyProject: { clientId: authenticatedUserId },
+        OR: [
+          {
+            agencyProjectId: { not: null },
+            agencyProject: { clientId: authenticatedUserId },
+          },
+          {
+            userId: authenticatedUserId,
+            agencyProjectId: null,
+          },
+        ],
       };
     } else {
       const scopedUserId =

@@ -130,6 +130,8 @@ export default function AdminPortal() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const [currentStatus, setCurrentStatus] = useState("Awaiting Assets");
+  const [phaseProjectId, setPhaseProjectId] = useState<string | null>(null);
+  const [phaseUpdateError, setPhaseUpdateError] = useState<string | null>(null);
   const statusOptions = [
     "Awaiting Assets",
     "Ingesting",
@@ -404,6 +406,7 @@ export default function AdminPortal() {
     setSelectedClient(clientId);
     setClientBrief(null);
     setShowInvoiceForm(false);
+    setPhaseUpdateError(null);
 
     // Load vault assets from the media API (R2 + Prisma), scoped to the client userId.
     try {
@@ -413,14 +416,6 @@ export default function AdminPortal() {
       console.error("Failed to load client media assets:", error);
       setClientAssets([]);
     }
-
-    // Load Status
-    const { data: statusData } = await supabase
-      .from("project_status")
-      .select("status")
-      .eq("user_id", clientId)
-      .single();
-    setCurrentStatus(statusData?.status || "Awaiting Assets");
 
     // Load Brief
     const { data: briefData } = await supabase
@@ -442,27 +437,41 @@ export default function AdminPortal() {
   };
 
   const updateStatus = async (newStatus: string) => {
-    if (!selectedClient) return;
+    if (!selectedClient || !phaseProjectId) return;
     setActionLoading("status_update");
-    const { error } = await supabase
-      .from("project_status")
-      .upsert(
-        {
-          user_id: selectedClient,
-          status: newStatus,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "user_id" },
-      );
-    if (!error) {
+    setPhaseUpdateError(null);
+
+    try {
+      const res = await fetch("/api/agency/projects", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: phaseProjectId, status: newStatus }),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setPhaseUpdateError(
+          (data as { error?: string }).error || "Failed to update project phase",
+        );
+        return;
+      }
+
       setCurrentStatus(newStatus);
+      setProjects((prev) =>
+        prev.map((project) =>
+          project.id === phaseProjectId ? { ...project, ...data } : project,
+        ),
+      );
       setMessage({
         type: "success",
         text: `HQ Override: Status changed to "${newStatus}"`,
       });
       setTimeout(() => setMessage(null), 3000);
+    } catch {
+      setPhaseUpdateError("Failed to update project phase");
+    } finally {
+      setActionLoading(null);
     }
-    setActionLoading(null);
   };
 
   const handleDownload = (asset: MediaAssetRecord) => {
@@ -667,6 +676,42 @@ export default function AdminPortal() {
         project.client?.id === selectedClient,
     );
   }, [projects, selectedClient]);
+
+  useEffect(() => {
+    if (!selectedClient) {
+      setPhaseProjectId(null);
+      return;
+    }
+
+    if (clientProjectsForSelected.length === 0) {
+      setPhaseProjectId(null);
+      setCurrentStatus("Awaiting Assets");
+      return;
+    }
+
+    setPhaseProjectId((prev) => {
+      const stillValid =
+        prev && clientProjectsForSelected.some((project: any) => project.id === prev);
+      return stillValid ? prev : clientProjectsForSelected[0].id;
+    });
+  }, [selectedClient, clientProjectsForSelected]);
+
+  useEffect(() => {
+    if (!phaseProjectId) return;
+
+    const project = clientProjectsForSelected.find(
+      (entry: any) => entry.id === phaseProjectId,
+    );
+    if (!project) return;
+
+    const nextStatus =
+      typeof project.status === "string" &&
+      statusOptions.includes(project.status)
+        ? project.status
+        : "Awaiting Assets";
+    setCurrentStatus(nextStatus);
+  }, [phaseProjectId, clientProjectsForSelected]);
+
   const unassignedAssetCount = useMemo(
     () => clientAssets.filter((asset) => !asset.agencyProjectId).length,
     [clientAssets],
@@ -1627,17 +1672,56 @@ export default function AdminPortal() {
                     <p className="text-text-gray text-[10px] uppercase tracking-widest mb-3">
                       Project Phase Control
                     </p>
+                    {clientProjectsForSelected.length === 0 ? (
+                      <p className="text-[10px] text-text-gray italic mb-3">
+                        No agency projects for this client yet.
+                      </p>
+                    ) : null}
+                    {clientProjectsForSelected.length > 1 ? (
+                      <div className="mb-3">
+                        <label className="block text-[9px] uppercase tracking-widest text-text-gray mb-1.5">
+                          Target Project
+                        </label>
+                        <select
+                          value={phaseProjectId || ""}
+                          onChange={(e) => {
+                            setPhaseProjectId(e.target.value);
+                            setPhaseUpdateError(null);
+                          }}
+                          className="w-full max-w-md bg-bg-body border border-white/10 p-2 text-[11px] text-white focus:border-gold-primary outline-none"
+                        >
+                          {clientProjectsForSelected.map((project: any) => (
+                            <option key={project.id} value={project.id}>
+                              {project.title}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : null}
+                    {phaseUpdateError ? (
+                      <p className="text-[10px] text-red-400 mb-3 border border-red-500/20 bg-red-500/5 px-2 py-1.5">
+                        {phaseUpdateError}
+                      </p>
+                    ) : null}
                     <div className="flex flex-wrap gap-2">
                       {statusOptions.map((s) => (
                         <button
                           key={s}
                           onClick={() => updateStatus(s)}
-                          className={`px-3 py-1.5 text-[10px] uppercase tracking-widest border transition-all ${currentStatus === s ? "bg-gold-primary text-black border-gold-primary font-bold" : "bg-transparent text-text-gray border-white/10 hover:border-gold-primary/50"}`}
+                          disabled={
+                            !phaseProjectId || actionLoading === "status_update"
+                          }
+                          className={`px-3 py-1.5 text-[10px] uppercase tracking-widest border transition-all disabled:opacity-40 disabled:cursor-not-allowed ${currentStatus === s ? "bg-gold-primary text-black border-gold-primary font-bold" : "bg-transparent text-text-gray border-white/10 hover:border-gold-primary/50"}`}
                         >
                           {s}
                         </button>
                       ))}
                     </div>
+                    {actionLoading === "status_update" ? (
+                      <p className="text-[9px] text-text-gray mt-2 uppercase tracking-widest">
+                        Updating phase...
+                      </p>
+                    ) : null}
                   </div>
 
                   {/* Billing & Finances */}

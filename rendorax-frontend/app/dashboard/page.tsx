@@ -113,6 +113,25 @@ const TASK_STATUS_ACTION_LABELS: Record<
   in_review: "Mark Complete",
 };
 
+const PIPELINE_STATUSES = [
+  "Awaiting Assets",
+  "Ingesting",
+  "Offline Edit",
+  "Color Grading",
+  "Audio & Master",
+  "Ready for Review",
+] as const;
+
+function normalizePipelineStatus(status: string | undefined): string {
+  if (
+    status &&
+    PIPELINE_STATUSES.includes(status as (typeof PIPELINE_STATUSES)[number])
+  ) {
+    return status;
+  }
+  return "Awaiting Assets";
+}
+
 export default function DashboardPage() {
   const supabase = createClient();
   const [user, setUser] = useState<any>(null);
@@ -147,8 +166,6 @@ export default function DashboardPage() {
     setIsLiveStreaming,
     isScreenSharing,
     setIsScreenSharing,
-    projectStage,
-    setProjectStage,
     setViewSettings,
     clearGallerySelection,
   } = useDashboardStore();
@@ -280,20 +297,6 @@ export default function DashboardPage() {
   // Fetch feature flags
   const { flags } = useFeatureFlags(user?.id);
 
-  // Project Progress Logic
-  const POST_PROD_STAGES = [
-    "Ingest & Sync",
-    "Rough Cut",
-    "VFX & Color",
-    "Sound Mix",
-    "Picture Lock",
-    "Final Master",
-  ];
-  const currentStageIndex = POST_PROD_STAGES.indexOf(projectStage);
-  const progressPercentage = Math.round(
-    ((currentStageIndex + 1) / POST_PROD_STAGES.length) * 100,
-  );
-
   const [isLocked, setIsLocked] = useState(false);
   const [integrityHash, setIntegrityHash] = useState<string | null>(null);
   const [isLocking, setIsLocking] = useState(false);
@@ -397,6 +400,94 @@ export default function DashboardPage() {
     return Array.from(seen.values());
   }, [editorTasks]);
 
+  // Project Progress Logic (AgencyProject.status)
+  const [projectPhase, setProjectPhase] = useState("Awaiting Assets");
+  const [phaseUpdating, setPhaseUpdating] = useState(false);
+  const [phaseUpdateError, setPhaseUpdateError] = useState<string | null>(null);
+
+  const activeProjectStatus = useMemo(() => {
+    if (!activeProjectId) return "Awaiting Assets";
+
+    if (!isEditor) {
+      const project = clientProjects.find((entry) => entry.id === activeProjectId);
+      return normalizePipelineStatus(project?.status);
+    }
+
+    const task = editorTasks.find(
+      (entry) => entry.project?.id === activeProjectId,
+    );
+    return normalizePipelineStatus(task?.project?.status);
+  }, [activeProjectId, isEditor, clientProjects, editorTasks]);
+
+  useEffect(() => {
+    setProjectPhase(activeProjectStatus);
+    setPhaseUpdateError(null);
+  }, [activeProjectStatus]);
+
+  const currentStageIndex = PIPELINE_STATUSES.indexOf(
+    projectPhase as (typeof PIPELINE_STATUSES)[number],
+  );
+  const progressPercentage = Math.round(
+    ((Math.max(currentStageIndex, 0) + 1) / PIPELINE_STATUSES.length) * 100,
+  );
+
+  const updateProjectPhase = useCallback(
+    async (newStatus: string) => {
+      if (!isEditor || !activeProjectId) return;
+
+      setPhaseUpdating(true);
+      setPhaseUpdateError(null);
+
+      try {
+        const res = await fetch("/api/agency/projects", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            projectId: activeProjectId,
+            status: newStatus,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          setPhaseUpdateError(
+            (data as { error?: string }).error || "Failed to update project phase",
+          );
+          return;
+        }
+
+        setProjectPhase(newStatus);
+        setClientProjects((prev) =>
+          prev.map((project) =>
+            project.id === activeProjectId
+              ? { ...project, status: newStatus }
+              : project,
+          ),
+        );
+        setEditorTasks((prev) =>
+          prev.map((task) =>
+            task.project?.id === activeProjectId
+              ? {
+                  ...task,
+                  project: task.project
+                    ? { ...task.project, status: newStatus }
+                    : task.project,
+                }
+              : task,
+          ),
+        );
+      } catch {
+        setPhaseUpdateError("Failed to update project phase");
+      } finally {
+        setPhaseUpdating(false);
+      }
+    },
+    [isEditor, activeProjectId],
+  );
+
+  const clientRequiresProjectForFetch =
+    !isEditor && clientProjects.length > 0;
+
   const fileManagerProjectOptions = useMemo(
     () => ({
       uploadAgencyProjectId: activeProjectId || undefined,
@@ -405,9 +496,9 @@ export default function DashboardPage() {
           ? activeProjectId
           : undefined
         : activeProjectId || undefined,
-      requireProjectIdForFetch: !isEditor,
+      requireProjectIdForFetch: clientRequiresProjectForFetch,
     }),
-    [isEditor, activeProjectId, assetViewScope],
+    [isEditor, activeProjectId, assetViewScope, clientRequiresProjectForFetch],
   );
 
   useEffect(() => {
@@ -480,7 +571,9 @@ export default function DashboardPage() {
   );
 
   const clientAwaitingProjectSelection =
-    !isEditor && (!activeProjectId || clientProjectsLoading);
+    !isEditor &&
+    clientProjects.length > 0 &&
+    (!activeProjectId || clientProjectsLoading);
 
   useEffect(() => {
     if (isEditor) return;
@@ -1252,7 +1345,7 @@ export default function DashboardPage() {
       return;
     }
 
-    if (!isEditor && !activeProjectId) {
+    if (!isEditor && clientProjects.length > 0 && !activeProjectId) {
       cloudAssetsLoadGenRef.current += 1;
       setCloudAssets([]);
       return;
@@ -1271,6 +1364,7 @@ export default function DashboardPage() {
     currentFolder,
     isEditor,
     activeProjectId,
+    clientProjects.length,
     applyProjectFilterToFetchParams,
   ]);
 
@@ -1357,7 +1451,7 @@ export default function DashboardPage() {
       return;
     }
 
-    if (!isEditor && !activeProjectId) {
+    if (!isEditor && clientProjects.length > 0 && !activeProjectId) {
       cloudAssetsLoadGenRef.current += 1;
       setCloudAssets([]);
       setCloudAssetsLoading(false);
@@ -1389,6 +1483,7 @@ export default function DashboardPage() {
     currentFolder,
     isEditor,
     activeProjectId,
+    clientProjects.length,
     applyProjectFilterToFetchParams,
   ]);
 
@@ -1604,8 +1699,9 @@ export default function DashboardPage() {
                 </button>
               </div>
             ) : clientProjects.length === 0 ? (
-              <span className="text-[10px] text-gray-500 italic">
-                No projects are available for review yet.
+              <span className="text-[10px] text-gray-500 italic max-w-[280px]">
+                Upload and organize project materials here. Your production team
+                can link them to a project later.
               </span>
             ) : clientProjects.length === 1 ? (
               <div className="flex items-center gap-2">
@@ -1960,12 +2056,22 @@ export default function DashboardPage() {
                   ) : isClientVaultRootSelected ? (
                     <div className="flex h-full min-h-[320px] flex-col items-center justify-center rounded-xl border border-dashed border-white/5 bg-[#0a0a0f]/40 px-6 py-16 text-center">
                       <span className="mb-4 text-3xl opacity-30">📂</span>
-                      <p className="text-xs font-medium uppercase tracking-[0.25em] text-gray-500">
-                        Select a folder from the sidebar
-                      </p>
-                      <p className="mt-2 max-w-xs text-[11px] leading-relaxed text-gray-600">
-                        Open Cloud Delivery or Vault inside Client Vault to browse assets.
-                      </p>
+                      {clientProjects.length === 0 ? (
+                        <p className="max-w-sm text-[11px] leading-relaxed text-gray-500">
+                          Upload and organize project materials here. Your
+                          production team can link them to a project later.
+                        </p>
+                      ) : (
+                        <>
+                          <p className="text-xs font-medium uppercase tracking-[0.25em] text-gray-500">
+                            Select a folder from the sidebar
+                          </p>
+                          <p className="mt-2 max-w-xs text-[11px] leading-relaxed text-gray-600">
+                            Open Cloud Delivery or Vault inside Client Vault to
+                            browse assets.
+                          </p>
+                        </>
+                      )}
                     </div>
                   ) : clientProjectHasNoAssets ? (
                     <div className="flex h-full min-h-[320px] flex-col items-center justify-center rounded-xl border border-dashed border-white/5 bg-[#0a0a0f]/40 px-6 py-16 text-center">
@@ -2127,11 +2233,14 @@ export default function DashboardPage() {
                             Phase:
                           </span>
                           <select
-                            value={projectStage}
-                            onChange={(e) => setProjectStage(e.target.value)}
-                            className="bg-[#121217] text-[#d4af37] text-[10px] font-bold px-2 py-1 rounded border border-white/10 outline-none cursor-pointer"
+                            value={projectPhase}
+                            onChange={(e) => void updateProjectPhase(e.target.value)}
+                            disabled={
+                              !isEditor || !activeProjectId || phaseUpdating
+                            }
+                            className="bg-[#121217] text-[#d4af37] text-[10px] font-bold px-2 py-1 rounded border border-white/10 outline-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                           >
-                            {POST_PROD_STAGES.map((stage) => (
+                            {PIPELINE_STATUSES.map((stage) => (
                               <option key={stage} value={stage}>
                                 {stage}
                               </option>
@@ -2145,7 +2254,7 @@ export default function DashboardPage() {
                           </span>
                           <div
                             className="w-20 sm:w-24 h-1.5 bg-gray-800 rounded-full overflow-hidden flex"
-                            title={`${projectStage} (${progressPercentage}%)`}
+                            title={`${projectPhase} (${progressPercentage}%)`}
                           >
                             <div
                               className="h-full bg-[#d4af37] transition-all duration-500"
@@ -2156,6 +2265,16 @@ export default function DashboardPage() {
                             {progressPercentage}%
                           </span>
                         </div>
+                        {phaseUpdateError ? (
+                          <span className="text-[9px] text-red-400 shrink-0">
+                            {phaseUpdateError}
+                          </span>
+                        ) : null}
+                        {phaseUpdating ? (
+                          <span className="text-[9px] text-gray-500 uppercase tracking-widest shrink-0">
+                            Updating...
+                          </span>
+                        ) : null}
                       </div>
 
                       <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto custom-scrollbar pb-1 md:pb-0 shrink-0">
