@@ -1,6 +1,13 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
+import { createPortal } from "react-dom";
 import {
   copyShareLink,
   downloadFromUrl,
@@ -17,13 +24,60 @@ import { useDashboardStore, type GallerySelectableAsset } from "@/store/useDashb
 import SubtitleLanguageModal from "@/components/modals/SubtitleLanguageModal";
 import { getSelectableAssetPreviewKey } from "@/utils/previewAssetKey";
 
+const VIEWPORT_MARGIN = 8;
+const MENU_GAP = 4;
+const MENU_MIN_WIDTH = 180;
+
 interface AssetContextMenuProps {
   asset: GallerySelectableAsset;
   shareUrl: string;
   isEditor?: boolean;
   className?: string;
   onRename?: () => void;
+  onMove?: () => void;
   onDelete?: () => void;
+}
+
+type MenuPosition = {
+  top: number;
+  left: number;
+};
+
+function computeMenuPosition(
+  triggerRect: DOMRect,
+  menuWidth: number,
+  menuHeight: number,
+): MenuPosition {
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+
+  let left = triggerRect.right - menuWidth;
+  if (left < VIEWPORT_MARGIN) {
+    left = VIEWPORT_MARGIN;
+  }
+  if (left + menuWidth > viewportWidth - VIEWPORT_MARGIN) {
+    left = Math.max(VIEWPORT_MARGIN, viewportWidth - VIEWPORT_MARGIN - menuWidth);
+  }
+
+  const spaceBelow = viewportHeight - triggerRect.bottom - VIEWPORT_MARGIN;
+  const spaceAbove = triggerRect.top - VIEWPORT_MARGIN;
+  const openBelow = menuHeight + MENU_GAP <= spaceBelow;
+  const openAbove = menuHeight + MENU_GAP <= spaceAbove;
+
+  let top: number;
+  if (openBelow) {
+    top = triggerRect.bottom + MENU_GAP;
+  } else if (openAbove) {
+    top = triggerRect.top - menuHeight - MENU_GAP;
+  } else {
+    top = Math.min(
+      triggerRect.bottom + MENU_GAP,
+      viewportHeight - VIEWPORT_MARGIN - menuHeight,
+    );
+    top = Math.max(VIEWPORT_MARGIN, top);
+  }
+
+  return { top, left };
 }
 
 export default function AssetContextMenu({
@@ -32,12 +86,19 @@ export default function AssetContextMenu({
   isEditor = false,
   className = "",
   onRename,
+  onMove,
   onDelete,
 }: AssetContextMenuProps) {
   const [open, setOpen] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [subtitleModalOpen, setSubtitleModalOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
+  const [canUsePortal, setCanUsePortal] = useState(false);
+
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuPanelRef = useRef<HTMLDivElement>(null);
+
   const selectedLanguage = useGlobalStore((state) => state.selectedLanguage);
   const addPreviewSubtitleTrack = useDashboardStore(
     (state) => state.addPreviewSubtitleTrack,
@@ -50,17 +111,70 @@ export default function AssetContextMenu({
   );
 
   useEffect(() => {
-    if (!open) return;
+    setCanUsePortal(typeof document !== "undefined");
+  }, []);
+
+  const updateMenuPosition = useCallback(() => {
+    const trigger = triggerRef.current;
+    const panel = menuPanelRef.current;
+    if (!trigger || !panel || typeof window === "undefined") return;
+
+    const triggerRect = trigger.getBoundingClientRect();
+    const menuWidth = panel.offsetWidth || MENU_MIN_WIDTH;
+    const menuHeight = panel.offsetHeight;
+
+    setMenuPosition(computeMenuPosition(triggerRect, menuWidth, menuHeight));
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setMenuPosition(null);
+      return;
+    }
+
+    updateMenuPosition();
+  }, [open, updateMenuPosition]);
+
+  useEffect(() => {
+    if (!open || typeof window === "undefined") return;
 
     const handleClickOutside = (event: MouseEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (
+        wrapperRef.current?.contains(target) ||
+        menuPanelRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setOpen(false);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
         setOpen(false);
       }
     };
 
+    const handleScroll = () => {
+      setOpen(false);
+    };
+
+    const handleResize = () => {
+      updateMenuPosition();
+    };
+
     window.addEventListener("mousedown", handleClickOutside);
-    return () => window.removeEventListener("mousedown", handleClickOutside);
-  }, [open]);
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("scroll", handleScroll, true);
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      window.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("scroll", handleScroll, true);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [open, updateMenuPosition]);
 
   const handleDownload = async (event: React.MouseEvent) => {
     event.stopPropagation();
@@ -125,91 +239,124 @@ export default function AssetContextMenu({
     }
   };
 
-  return (
-    <>
-      <div ref={menuRef} className={`relative ${className}`} data-no-marquee>
+  const menuPanel = (
+    <div
+      ref={menuPanelRef}
+      role="menu"
+      style={{
+        position: "fixed",
+        top: menuPosition?.top ?? 0,
+        left: menuPosition?.left ?? 0,
+        visibility: menuPosition ? "visible" : "hidden",
+        minWidth: MENU_MIN_WIDTH,
+      }}
+      className="z-[70] overflow-hidden rounded-md border border-white/10 bg-[#121217] py-1 shadow-2xl"
+      onMouseDown={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
+    >
+      {onRename && (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            setOpen(false);
+            onRename();
+          }}
+          className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] text-gray-200 transition-colors hover:bg-white/5 hover:text-[#d4af37]"
+        >
+          Rename
+        </button>
+      )}
+      {onMove && (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            setOpen(false);
+            onMove();
+          }}
+          className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] text-gray-200 transition-colors hover:bg-white/5 hover:text-[#3b82f6]"
+        >
+          Move
+        </button>
+      )}
+      {onDelete && (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            setOpen(false);
+            onDelete();
+          }}
+          className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] text-red-300 transition-colors hover:bg-red-500/10 hover:text-red-200"
+        >
+          Delete
+        </button>
+      )}
       <button
         type="button"
-        onClick={(event) => {
-          event.stopPropagation();
-          setOpen((value) => !value);
-        }}
-        disabled={isTranscribing}
-        className="flex h-7 w-7 items-center justify-center rounded-md border border-white/10 bg-black/70 text-gray-300 transition-colors hover:border-[#d4af37]/40 hover:text-[#d4af37] disabled:cursor-wait disabled:opacity-60"
-        aria-label="Asset actions"
+        onClick={handleDownload}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] text-gray-200 transition-colors hover:bg-white/5 hover:text-[#d4af37]"
       >
-        {isTranscribing ? (
-          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#d4af37] border-t-transparent" />
-        ) : (
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="currentColor"
-          >
-            <circle cx="5" cy="12" r="2" />
-            <circle cx="12" cy="12" r="2" />
-            <circle cx="19" cy="12" r="2" />
-          </svg>
-        )}
+        Download
       </button>
-
-      {open && (
-        <div className="absolute right-0 top-full z-30 mt-1 min-w-[180px] overflow-hidden rounded-md border border-white/10 bg-[#121217] py-1 shadow-2xl">
-          {onRename && (
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                setOpen(false);
-                onRename();
-              }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] text-gray-200 transition-colors hover:bg-white/5 hover:text-[#d4af37]"
-            >
-              Rename
-            </button>
-          )}
-          {onDelete && (
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                setOpen(false);
-                onDelete();
-              }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] text-red-300 transition-colors hover:bg-red-500/10 hover:text-red-200"
-            >
-              Delete
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={handleDownload}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] text-gray-200 transition-colors hover:bg-white/5 hover:text-[#d4af37]"
-          >
-            Download
-          </button>
-          <button
-            type="button"
-            onClick={handleShare}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] text-gray-200 transition-colors hover:bg-white/5 hover:text-[#d4af37]"
-          >
-            Copy Link
-          </button>
-          {isEditor && canGenerateSubtitles && (
-            <button
-              type="button"
-              disabled={isTranscribing}
-              onClick={handleGenerateSubtitles}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] text-gray-200 transition-colors hover:bg-white/5 hover:text-[#d4af37] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isTranscribing ? "Generating…" : "Generate Subtitles (CC)"}
-            </button>
-          )}
-        </div>
+      <button
+        type="button"
+        onClick={handleShare}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] text-gray-200 transition-colors hover:bg-white/5 hover:text-[#d4af37]"
+      >
+        Copy Link
+      </button>
+      {isEditor && canGenerateSubtitles && (
+        <button
+          type="button"
+          disabled={isTranscribing}
+          onClick={handleGenerateSubtitles}
+          className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] text-gray-200 transition-colors hover:bg-white/5 hover:text-[#d4af37] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isTranscribing ? "Generating…" : "Generate Subtitles (CC)"}
+        </button>
       )}
+    </div>
+  );
+
+  return (
+    <>
+      <div ref={wrapperRef} className={`relative ${className}`} data-no-marquee>
+        <button
+          ref={triggerRef}
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            setOpen((value) => !value);
+          }}
+          disabled={isTranscribing}
+          className="flex h-7 w-7 items-center justify-center rounded-md border border-white/10 bg-black/70 text-gray-300 transition-colors hover:border-[#d4af37]/40 hover:text-[#d4af37] disabled:cursor-wait disabled:opacity-60"
+          aria-label="Asset actions"
+          aria-expanded={open}
+          aria-haspopup="menu"
+        >
+          {isTranscribing ? (
+            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#d4af37] border-t-transparent" />
+          ) : (
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+            >
+              <circle cx="5" cy="12" r="2" />
+              <circle cx="12" cy="12" r="2" />
+              <circle cx="19" cy="12" r="2" />
+            </svg>
+          )}
+        </button>
       </div>
+
+      {open && canUsePortal
+        ? createPortal(menuPanel, document.body)
+        : null}
 
       <SubtitleLanguageModal
         isOpen={subtitleModalOpen}

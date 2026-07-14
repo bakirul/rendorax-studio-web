@@ -19,6 +19,7 @@ interface FileData {
   isVideo?: boolean;
   isCdn?: boolean;
   assetId?: string;
+  agencyProjectId?: string | null;
   previewKey?: string;
 }
 

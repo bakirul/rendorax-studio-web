@@ -25,9 +25,24 @@ import {
   downloadTextFile,
   resolveExportFps,
 } from "@/utils/exportReviewMarkers";
+import { setCommentResolved } from "@/utils/projectFeedbackSummary";
 
 function formatCommentTimecode(seconds: number): string {
   return `${Math.floor(seconds / 60)}:${("0" + Math.floor(seconds % 60)).slice(-2)}`;
+}
+
+/** Keep filename fallback from stealing another project's mapped comments. */
+function filterFilenameFallbackRows(
+  rows: VideoCommentRow[],
+  agencyProjectId?: string | null,
+): VideoCommentRow[] {
+  if (!agencyProjectId) {
+    return rows.filter((row) => !row.agency_project_id);
+  }
+  return rows.filter(
+    (row) =>
+      !row.agency_project_id || row.agency_project_id === agencyProjectId,
+  );
 }
 
 function formatCompiledNoteLine(comment: VideoCommentRow): string {
@@ -79,18 +94,75 @@ export const useLiveComments = (
   const commentsRef = useRef<DisplayCommentRow[]>([]);
   commentsRef.current = comments;
 
-  const fetchComments = useCallback(
-    async (fileName: string) => {
-      const { data } = await supabase
+  const fetchCommentsForPreview = useCallback(async () => {
+    const fileName = previewFile?.name?.trim();
+    const assetId =
+      typeof previewFile?.assetId === "string"
+        ? previewFile.assetId.trim()
+        : "";
+    const agencyProjectId =
+      typeof previewFile?.agencyProjectId === "string"
+        ? previewFile.agencyProjectId.trim()
+        : null;
+
+    if (!fileName) {
+      setComments([]);
+      return;
+    }
+
+    if (assetId) {
+      const { data: byAsset, error: assetError } = await supabase
+        .from("video_comments")
+        .select("*")
+        .eq("media_asset_id", assetId)
+        .order("time_stamp", { ascending: true });
+
+      if (assetError) {
+        console.error("Failed to load comments by media_asset_id:", assetError);
+      }
+
+      if (byAsset && byAsset.length > 0) {
+        setComments(byAsset);
+        return;
+      }
+
+      const { data: byName, error: nameError } = await supabase
         .from("video_comments")
         .select("*")
         .eq("file_name", fileName)
         .order("time_stamp", { ascending: true });
-      if (data) setComments(data);
-      else setComments([]);
-    },
-    [supabase],
-  );
+
+      if (nameError) {
+        console.error("Failed to load comments by file_name:", nameError);
+        setComments([]);
+        return;
+      }
+
+      setComments(
+        filterFilenameFallbackRows(byName ?? [], agencyProjectId),
+      );
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("video_comments")
+      .select("*")
+      .eq("file_name", fileName)
+      .order("time_stamp", { ascending: true });
+
+    if (error) {
+      console.error("Failed to load legacy comments:", error);
+      setComments([]);
+      return;
+    }
+
+    setComments(filterFilenameFallbackRows(data ?? [], agencyProjectId));
+  }, [
+    previewFile?.name,
+    previewFile?.assetId,
+    previewFile?.agencyProjectId,
+    supabase,
+  ]);
 
   useEffect(() => {
     if (!previewFile?.name || !previewFile?.isVideo) {
@@ -98,8 +170,14 @@ export const useLiveComments = (
       return;
     }
 
-    void fetchComments(previewFile.name);
-  }, [previewFile?.name, previewFile?.isVideo, fetchComments]);
+    void fetchCommentsForPreview();
+  }, [
+    previewFile?.name,
+    previewFile?.isVideo,
+    previewFile?.assetId,
+    previewFile?.agencyProjectId,
+    fetchCommentsForPreview,
+  ]);
 
   const applyCachedDisplayMetadata = useCallback(
     (rows: DisplayCommentRow[]): DisplayCommentRow[] => {
@@ -255,10 +333,20 @@ export const useLiveComments = (
       });
     };
 
+    const handleCommentUpdated = (incomingComment: VideoCommentRow) => {
+      if (!incomingComment?.id) return;
+      setComments((prev) =>
+        prev.map((row) =>
+          row.id === incomingComment.id ? { ...row, ...incomingComment } : row,
+        ),
+      );
+    };
+
     newSocket.on("connect", handleConnect);
     newSocket.on("connect_error", handleConnectError);
     newSocket.on("disconnect", handleDisconnect);
     newSocket.on("comment-added", handleCommentAdded);
+    newSocket.on("comment-updated", handleCommentUpdated);
 
     return () => {
       activeRoomRef.current = null;
@@ -266,6 +354,7 @@ export const useLiveComments = (
       newSocket.off("connect_error", handleConnectError);
       newSocket.off("disconnect", handleDisconnect);
       newSocket.off("comment-added", handleCommentAdded);
+      newSocket.off("comment-updated", handleCommentUpdated);
       newSocket.disconnect();
       setSocket(null);
       setIsLive(false);
@@ -345,19 +434,31 @@ export const useLiveComments = (
     const currentTime = videoRef.current?.currentTime ?? 0;
 
     const author = resolveCommentAuthor(user);
+    const assetId =
+      typeof previewFile?.assetId === "string"
+        ? previewFile.assetId.trim()
+        : "";
+    const agencyProjectId =
+      typeof previewFile?.agencyProjectId === "string"
+        ? previewFile.agencyProjectId.trim()
+        : "";
+
+    const insertPayload: Record<string, unknown> = {
+      file_name: commentFileKey,
+      user_id: user.id,
+      time_stamp: currentTime,
+      comment_text: commentTextToSend,
+      author_display_name: author.author_display_name,
+      author_avatar_url: author.author_avatar_url,
+      is_resolved: false,
+    };
+
+    if (assetId) insertPayload.media_asset_id = assetId;
+    if (agencyProjectId) insertPayload.agency_project_id = agencyProjectId;
 
     const { data, error } = await supabase
       .from("video_comments")
-      .insert([
-        {
-          file_name: commentFileKey,
-          user_id: user.id,
-          time_stamp: currentTime,
-          comment_text: commentTextToSend,
-          author_display_name: author.author_display_name,
-          author_avatar_url: author.author_avatar_url,
-        },
-      ])
+      .insert([insertPayload])
       .select();
     if (!error && data && data.length > 0) {
       const insertedComment = data[0];
@@ -372,6 +473,55 @@ export const useLiveComments = (
         });
       }
     } else if (error) console.error("Supabase insert error:", error);
+  };
+
+  const handleResolveComment = async (
+    commentId: string,
+    resolved: boolean,
+  ) => {
+    const previous = commentsRef.current.find((c) => c.id === commentId);
+    setComments((prev) =>
+      prev.map((comment) =>
+        comment.id === commentId
+          ? {
+              ...comment,
+              is_resolved: resolved,
+              resolved_at: resolved ? new Date().toISOString() : null,
+              resolved_by: resolved ? user?.id ?? null : null,
+            }
+          : comment,
+      ),
+    );
+
+    try {
+      const updated = await setCommentResolved(commentId, resolved);
+      setComments((prev) =>
+        prev.map((comment) =>
+          comment.id === commentId ? { ...comment, ...updated } : comment,
+        ),
+      );
+      if (socket) {
+        const reviewRoomId = getReviewRoomId(previewFile, currentFolder);
+        socket.emit("comment-updated", {
+          fileId: reviewRoomId,
+          ...updated,
+        });
+      }
+    } catch (error) {
+      console.error("Failed to update comment resolve state:", error);
+      if (previous) {
+        setComments((prev) =>
+          prev.map((comment) =>
+            comment.id === commentId ? previous : comment,
+          ),
+        );
+      }
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Failed to update resolve state",
+      );
+    }
   };
 
   const handleDeleteComment = async (commentId: string) => {
@@ -577,10 +727,11 @@ export const useLiveComments = (
     isLive,
     isNotifying,
     notificationSent,
-    fetchComments,
+    fetchComments: fetchCommentsForPreview,
     handleAddComment,
     handleDeleteComment,
     handleEditComment,
+    handleResolveComment,
     handleNotifyTeam,
     handleCompileAndSend,
     handleDownloadReport,

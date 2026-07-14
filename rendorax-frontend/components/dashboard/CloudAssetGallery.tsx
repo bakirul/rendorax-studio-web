@@ -8,6 +8,7 @@ import {
   isMediaAssetVideo,
 } from "@/utils/mediaAssets";
 import { resolveAssetDisplayStatus } from "@/utils/mediaUploadStatus";
+import { PROJECT_ASSET_FOLDER } from "@/utils/projectAssetFolders";
 import { useDashboardStore } from "@/store/useDashboardStore";
 import type { GallerySelectableAsset } from "@/store/useDashboardStore";
 import { useGalleryViewStyles } from "@/hooks/useGalleryViewStyles";
@@ -240,9 +241,12 @@ export default function CloudAssetGallery({
             <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
           </svg>
         </div>
-        <p className="text-sm font-medium text-gray-300">No cloud assets in this folder</p>
+        <p className="text-sm font-medium text-gray-300">
+          No review versions are available here yet.
+        </p>
         <p className="mt-1 text-xs text-gray-500">
-          Upload to Cloud saves files to the active directory.
+          Upload Review Version saves project-linked cuts to{" "}
+          {PROJECT_ASSET_FOLDER.REVIEW}.
         </p>
       </div>
     );
@@ -365,7 +369,7 @@ export default function CloudAssetGallery({
               )}
               {isVideo && renderPlayOverlay(asset)}
               <div className="absolute bottom-2 left-2 rounded border border-[#d4af37]/30 bg-black/70 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-[#d4af37]">
-                CDN
+                Review
               </div>
             </div>
             {showCardInfo && (

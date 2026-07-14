@@ -70,8 +70,10 @@ model MediaAsset {
   proxyVersion      Int                  @default(1)
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
-  processingJobs    MediaProcessingJob[]
-  agencyProject     AgencyProject?       @relation(fields: [agencyProjectId], references: [id], onDelete: SetNull)
+  processingJobs         MediaProcessingJob[]
+  reviewVersionDecisions ReviewVersionDecision[]
+  pictureLockEvents      PictureLockEvent[]
+  agencyProject          AgencyProject?       @relation(fields: [agencyProjectId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([agencyProjectId])
@@ -134,6 +136,22 @@ enum TaskStatus {
   @@schema("public")
 }
 
+enum ReviewDecisionStatus {
+  submitted_for_review
+  approved
+  revision_requested
+  admin_override
+
+  @@schema("public")
+}
+
+enum PictureLockEventType {
+  locked
+  unlocked
+
+  @@schema("public")
+}
+
 /// Studio team member — `id` matches Supabase `auth.users.id`.
 model User {
   id             String          @id
@@ -142,9 +160,11 @@ model User {
   role           AgencyRole      @default(editor)
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
-  assignedTasks  Task[]
-  ownedProjects  AgencyProject[] @relation("ProjectOwner")
-  clientProjects AgencyProject[] @relation("ProjectClient")
+  assignedTasks          Task[]
+  ownedProjects          AgencyProject[]         @relation("ProjectOwner")
+  clientProjects         AgencyProject[]         @relation("ProjectClient")
+  reviewVersionDecisions ReviewVersionDecision[]
+  pictureLockEvents      PictureLockEvent[]
 
   @@schema("public")
 }
@@ -164,8 +184,10 @@ model AgencyProject {
   updatedAt      DateTime     @updatedAt
   owner          User         @relation("ProjectOwner", fields: [ownerId], references: [id])
   client         User?        @relation("ProjectClient", fields: [clientId], references: [id], onDelete: SetNull)
-  tasks          Task[]
-  assets         MediaAsset[]
+  tasks                  Task[]
+  assets                 MediaAsset[]
+  reviewVersionDecisions ReviewVersionDecision[]
+  pictureLockEvents      PictureLockEvent[]
 
   @@index([ownerId])
   @@index([clientId])
@@ -189,5 +211,43 @@ model Task {
   @@index([projectId])
   @@index([assigneeId])
   @@index([status])
+  @@schema("public")
+}
+
+model ReviewVersionDecision {
+  id              String               @id @default(uuid())
+  mediaAssetId    String
+  agencyProjectId String
+  status          ReviewDecisionStatus
+  actorId         String
+  actorRole       AgencyRole
+  note            String?
+  createdAt       DateTime             @default(now())
+  mediaAsset      MediaAsset           @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+  agencyProject   AgencyProject        @relation(fields: [agencyProjectId], references: [id], onDelete: Cascade)
+  actor           User                 @relation(fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([mediaAssetId, createdAt])
+  @@index([agencyProjectId, createdAt])
+  @@schema("public")
+}
+
+model PictureLockEvent {
+  id              String               @id @default(uuid())
+  mediaAssetId    String
+  agencyProjectId String
+  actorId         String
+  actorRole       AgencyRole
+  eventType       PictureLockEventType
+  integrityHash   String?
+  objectKey       String?
+  note            String?
+  createdAt       DateTime             @default(now())
+  mediaAsset      MediaAsset           @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+  agencyProject   AgencyProject        @relation(fields: [agencyProjectId], references: [id], onDelete: Cascade)
+  actor           User                 @relation(fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([mediaAssetId, createdAt])
+  @@index([agencyProjectId, createdAt])
   @@schema("public")
 }

@@ -346,18 +346,18 @@ router.post("/assets", async (req: AuthenticatedRequest, res: Response) => {
 
     let resolvedAgencyProjectId: string | null = null;
     if (typeof agencyProjectId === "string" && agencyProjectId.trim()) {
-      if (isClientUser(req)) {
-        return res.status(403).json({
-          error: "Clients cannot link assets to projects",
-        });
-      }
-
-      const linkCheck = await validateAgencyProjectLink(
-        prisma,
-        req,
-        agencyProjectId.trim(),
-        authenticatedUserId,
-      );
+      const linkCheck = isClientUser(req)
+        ? await assertCanFilterByAgencyProject(
+            prisma,
+            req,
+            agencyProjectId.trim(),
+          )
+        : await validateAgencyProjectLink(
+            prisma,
+            req,
+            agencyProjectId.trim(),
+            authenticatedUserId,
+          );
       if (!linkCheck.ok) {
         return res.status(linkCheck.status).json({ error: linkCheck.error });
       }
@@ -496,10 +496,6 @@ router.get("/assets", async (req: AuthenticatedRequest, res: Response) => {
       };
     }
 
-    if (normalizedFolder !== undefined) {
-      where.folder = normalizedFolder;
-    }
-
     if (typeof agencyProjectIdParam === "string" && agencyProjectIdParam.trim()) {
       const filterCheck = await assertCanFilterByAgencyProject(
         prisma,
@@ -509,7 +505,17 @@ router.get("/assets", async (req: AuthenticatedRequest, res: Response) => {
       if (!filterCheck.ok) {
         return res.status(filterCheck.status).json({ error: filterCheck.error });
       }
-      where.agencyProjectId = filterCheck.projectId;
+      if (isAdminUser(req) || isEditorUser(req)) {
+        // Project-scoped Admin/Editor: all assets linked to the project,
+        // regardless of uploader userId.
+        where = { agencyProjectId: filterCheck.projectId };
+      } else {
+        where.agencyProjectId = filterCheck.projectId;
+      }
+    }
+
+    if (normalizedFolder !== undefined) {
+      where.folder = normalizedFolder;
     }
 
     const assets = await prisma.mediaAsset.findMany({
@@ -648,21 +654,21 @@ router.patch("/assets/:id", async (req: AuthenticatedRequest, res: Response) => 
 
     let resolvedAgencyProjectId: string | null | undefined = undefined;
     if (agencyProjectId !== undefined) {
-      if (isClientUser(req)) {
-        return res.status(403).json({
-          error: "Clients cannot link assets to projects",
-        });
-      }
-
       if (agencyProjectId === null) {
         resolvedAgencyProjectId = null;
       } else if (typeof agencyProjectId === "string" && agencyProjectId.trim()) {
-        const linkCheck = await validateAgencyProjectLink(
-          prisma,
-          req,
-          agencyProjectId.trim(),
-          access.asset.userId,
-        );
+        const linkCheck = isClientUser(req)
+          ? await assertCanFilterByAgencyProject(
+              prisma,
+              req,
+              agencyProjectId.trim(),
+            )
+          : await validateAgencyProjectLink(
+              prisma,
+              req,
+              agencyProjectId.trim(),
+              access.asset.userId,
+            );
         if (!linkCheck.ok) {
           return res.status(linkCheck.status).json({ error: linkCheck.error });
         }

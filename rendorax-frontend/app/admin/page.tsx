@@ -20,6 +20,8 @@ import { buildPreviewPlayerKey } from "@/utils/previewAssetKey";
 import { getMediaFileCategory } from "@/utils/mediaFileCategory";
 import GlobalLiveWidget from "@/components/GlobalLiveWidget";
 import ChatbotWidget from "@/components/ChatbotWidget";
+import ProjectWorkflowSummary from "@/components/admin/ProjectWorkflowSummary";
+import ProjectFeedbackSummary from "@/components/admin/ProjectFeedbackSummary";
 import { Eye, EyeOff } from "lucide-react";
 
 const CLIENT_DISCOVERY_TIMEOUT_MS = 10_000;
@@ -31,7 +33,12 @@ type SidebarClientRow = {
   assetCount?: number;
 };
 
-function buildMergedClientList(
+type AdminIdentityLists = {
+  clients: SidebarClientRow[];
+  unassignedUploaders: SidebarClientRow[];
+};
+
+function buildAdminIdentityLists(
   agencyUsers: Array<{
     id: string;
     email?: string;
@@ -39,31 +46,46 @@ function buildMergedClientList(
     role?: string;
   }>,
   assetClients: MediaClientRecord[],
-): SidebarClientRow[] {
-  const byId = new Map<string, SidebarClientRow>();
+): AdminIdentityLists {
+  const usersById = new Map(agencyUsers.map((user) => [user.id, user] as const));
+  const clients: SidebarClientRow[] = [];
 
   for (const user of agencyUsers) {
     if (user.role !== "client") continue;
-    byId.set(user.id, {
+    clients.push({
       id: user.id,
       displayName: user.displayName,
       email: user.email,
     });
   }
 
+  const clientsById = new Map(clients.map((client) => [client.id, client] as const));
+  const unassignedUploaders: SidebarClientRow[] = [];
+
   for (const assetClient of assetClients) {
-    const existing = byId.get(assetClient.userId);
-    if (existing) {
-      existing.assetCount = assetClient.assetCount;
-    } else {
-      byId.set(assetClient.userId, {
-        id: assetClient.userId,
-        assetCount: assetClient.assetCount,
-      });
+    const knownClient = clientsById.get(assetClient.userId);
+    if (knownClient) {
+      knownClient.assetCount = assetClient.assetCount;
+      continue;
     }
+
+    const knownUser = usersById.get(assetClient.userId);
+    if (knownUser) {
+      // Admin / editor / other non-client roles are uploaders, not business clients.
+      if (knownUser.role !== "client") continue;
+    }
+
+    // No matching Prisma client — orphan uploader bucket only.
+    unassignedUploaders.push({
+      id: assetClient.userId,
+      assetCount: assetClient.assetCount,
+    });
   }
 
-  return Array.from(byId.values()).sort(compareSidebarClients);
+  return {
+    clients: clients.sort(compareSidebarClients),
+    unassignedUploaders: unassignedUploaders.sort(compareSidebarClients),
+  };
 }
 
 function getClientSortTier(client: SidebarClientRow): number {
@@ -85,7 +107,7 @@ function isActiveClient(client: SidebarClientRow): boolean {
   return Boolean(client.displayName?.trim() || client.email?.trim());
 }
 
-function isLegacyClient(client: SidebarClientRow): boolean {
+function isUnassignedUploader(client: SidebarClientRow): boolean {
   return !isActiveClient(client);
 }
 
@@ -107,14 +129,103 @@ function getClientPrimaryLabel(client: SidebarClientRow): string {
   const email = client.email?.trim();
   if (email) return email;
 
-  return `${client.id.substring(0, 8)}...`;
+  return "Unknown uploader";
 }
 
 function getClientSecondaryLabel(client: SidebarClientRow): string | null {
   const displayName = client.displayName?.trim();
   const email = client.email?.trim();
   if (displayName && email) return email;
+  if (!displayName && !email) {
+    return `${client.id.substring(0, 8)}…`;
+  }
   return null;
+}
+
+function resolveUploaderLabel(
+  userId: string | null | undefined,
+  agencyUsers: Array<{
+    id: string;
+    email?: string;
+    displayName?: string | null;
+  }>,
+): string {
+  if (!userId) return "Unknown uploader";
+  const user = agencyUsers.find((entry) => entry.id === userId);
+  const displayName = user?.displayName?.trim();
+  if (displayName) return displayName;
+  const email = user?.email?.trim();
+  if (email) return email;
+  return "Unknown uploader";
+}
+
+function getAssetLifecycleLabel(
+  asset: MediaAssetRecord,
+  projectClientId?: string | null,
+): string {
+  const folder = asset.folder?.trim() ?? "";
+  if (folder === "03_REVIEW" || folder.startsWith("03_REVIEW/")) {
+    return "Review Version";
+  }
+  if (folder === "04_PICTURE_LOCK" || folder.startsWith("04_PICTURE_LOCK/")) {
+    return "Picture Lock";
+  }
+  if (
+    folder === "05_MASTER_DELIVERY" ||
+    folder.startsWith("05_MASTER_DELIVERY/")
+  ) {
+    return "Master Delivery";
+  }
+  if (projectClientId && asset.userId === projectClientId) {
+    return "Client Material";
+  }
+  return "Working File";
+}
+
+function formatAssetAttributionLine(
+  asset: MediaAssetRecord,
+  agencyUsers: Array<{
+    id: string;
+    email?: string;
+    displayName?: string | null;
+  }>,
+  projectTitle?: string | null,
+  projectClientId?: string | null,
+): string {
+  const parts = [
+    getAssetLifecycleLabel(asset, projectClientId),
+    `Uploaded by ${resolveUploaderLabel(asset.userId, agencyUsers)}`,
+  ];
+  if (projectTitle?.trim()) {
+    parts.push(projectTitle.trim());
+  }
+  return parts.join(" · ");
+}
+
+function getProjectClientLabel(
+  client: { displayName?: string | null; email?: string | null } | null | undefined,
+): string {
+  const displayName = client?.displayName?.trim();
+  if (displayName) return displayName;
+
+  const email = client?.email?.trim();
+  if (email) return email;
+
+  return "Unassigned Client";
+}
+
+function getAssigneeLabel(
+  assignee: { displayName?: string | null; email?: string | null } | null | undefined,
+): string {
+  if (!assignee) return "Unassigned";
+
+  const displayName = assignee.displayName?.trim();
+  if (displayName) return displayName;
+
+  const email = assignee.email?.trim();
+  if (email) return email;
+
+  return "Unassigned";
 }
 
 export default function AdminPortal() {
@@ -147,6 +258,7 @@ export default function AdminPortal() {
     publicUrl: string;
     isVideo: boolean;
     assetId?: string;
+    agencyProjectId?: string | null;
   } | null>(null);
   const [clientComments, setClientComments] = useState<any[]>([]);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -190,6 +302,12 @@ export default function AdminPortal() {
   const [showTaskFormForProject, setShowTaskFormForProject] = useState<
     string | null
   >(null);
+  const [expandedProjectAssets, setExpandedProjectAssets] = useState<
+    Record<string, boolean>
+  >({});
+  const [projectOpenFeedbackCounts, setProjectOpenFeedbackCounts] = useState<
+    Record<string, number>
+  >({});
   const [newTask, setNewTask] = useState({
     title: "",
     description: "",
@@ -408,10 +526,36 @@ export default function AdminPortal() {
     setShowInvoiceForm(false);
     setPhaseUpdateError(null);
 
-    // Load vault assets from the media API (R2 + Prisma), scoped to the client userId.
+    // Business clients: own uploads + every asset linked to their projects
+    // (including editor/admin uploads). Orphan uploaders: uploader-scoped only.
     try {
-      const assets = await fetchMediaAssets({ userId: clientId });
-      setClientAssets(assets);
+      const isBusinessClient = agencyUsers.some(
+        (user: { id: string; role?: string }) =>
+          user.id === clientId && user.role === "client",
+      );
+
+      if (isBusinessClient) {
+        const clientProjects = projects.filter(
+          (project: any) =>
+            project.clientId === clientId || project.client?.id === clientId,
+        );
+        const [ownAssets, ...projectAssetLists] = await Promise.all([
+          fetchMediaAssets({ userId: clientId }).catch(() => [] as MediaAssetRecord[]),
+          ...clientProjects.map((project: any) =>
+            fetchMediaAssets({ agencyProjectId: project.id }).catch(
+              () => [] as MediaAssetRecord[],
+            ),
+          ),
+        ]);
+        const byId = new Map<string, MediaAssetRecord>();
+        for (const asset of [...ownAssets, ...projectAssetLists.flat()]) {
+          byId.set(asset.id, asset);
+        }
+        setClientAssets(Array.from(byId.values()));
+      } else {
+        const assets = await fetchMediaAssets({ userId: clientId });
+        setClientAssets(assets);
+      }
     } catch (error) {
       console.error("Failed to load client media assets:", error);
       setClientAssets([]);
@@ -532,15 +676,38 @@ export default function AdminPortal() {
         publicUrl: url ?? "",
         isVideo,
         assetId: asset.id,
+        agencyProjectId: asset.agencyProjectId ?? null,
       });
       if (isVideo && selectedClient) {
-        const { data } = await supabase
-          .from("video_comments")
-          .select("*")
-          .eq("file_name", asset.fileName)
-          .eq("user_id", selectedClient)
-          .order("time_stamp", { ascending: true });
-        if (data) setClientComments(data);
+        const byAsset = asset.id
+          ? await supabase
+              .from("video_comments")
+              .select("*")
+              .eq("media_asset_id", asset.id)
+              .order("time_stamp", { ascending: true })
+          : { data: null as any[] | null };
+
+        if (byAsset.data && byAsset.data.length > 0) {
+          setClientComments(byAsset.data);
+        } else {
+          const { data } = await supabase
+            .from("video_comments")
+            .select("*")
+            .eq("file_name", asset.fileName)
+            .eq("user_id", selectedClient)
+            .order("time_stamp", { ascending: true });
+          if (data) {
+            const projectId = asset.agencyProjectId ?? null;
+            setClientComments(
+              data.filter(
+                (row: { agency_project_id?: string | null }) =>
+                  !row.agency_project_id ||
+                  !projectId ||
+                  row.agency_project_id === projectId,
+              ),
+            );
+          }
+        }
       }
     }
     setActionLoading(null);
@@ -628,42 +795,80 @@ export default function AdminPortal() {
 
   const clientUsers = agencyUsers.filter((u: any) => u.role === "client");
   const editorUsers = agencyUsers.filter((u: any) => u.role === "editor" || u.role === "admin");
-  const mergedClients = useMemo(
-    () => buildMergedClientList(agencyUsers, clients),
+  const identityLists = useMemo(
+    () => buildAdminIdentityLists(agencyUsers, clients),
     [agencyUsers, clients],
   );
+  const businessClients = identityLists.clients;
+  const unassignedUploaders = identityLists.unassignedUploaders;
+  const mergedClients = useMemo(
+    () => [...businessClients, ...unassignedUploaders],
+    [businessClients, unassignedUploaders],
+  );
+
+  useEffect(() => {
+    if (!selectedClient) return;
+    const stillValid = mergedClients.some((row) => row.id === selectedClient);
+    if (!stillValid) {
+      setSelectedClient(null);
+      setClientAssets([]);
+    }
+  }, [mergedClients, selectedClient]);
+
+  const selectedIsBusinessClient = useMemo(
+    () =>
+      Boolean(
+        selectedClient &&
+          agencyUsers.some(
+            (user: { id: string; role?: string }) =>
+              user.id === selectedClient && user.role === "client",
+          ),
+      ),
+    [agencyUsers, selectedClient],
+  );
+
   const sidebarClientGroups = useMemo(() => {
     const query = clientSearchQuery.trim().toLowerCase();
 
-    let scoped = mergedClients;
+    let activeScoped = businessClients;
+    let unassignedScoped = unassignedUploaders;
+
     if (clientFilter === "active") {
-      scoped = scoped.filter(isActiveClient);
+      unassignedScoped = [];
     } else if (clientFilter === "legacy") {
-      scoped = scoped.filter(isLegacyClient);
+      activeScoped = [];
     }
 
-    const searched = query
-      ? scoped.filter((client) => matchesClientSearch(client, query))
-      : scoped;
-
-    const active = searched.filter(isActiveClient);
-    const legacy = searched.filter(isLegacyClient);
+    const active = query
+      ? activeScoped.filter((client) => matchesClientSearch(client, query))
+      : activeScoped;
+    const unassigned = query
+      ? unassignedScoped.filter((client) => matchesClientSearch(client, query))
+      : unassignedScoped;
 
     return {
       active,
-      legacy,
-      total: searched.length,
+      legacy: unassigned,
+      total: active.length + unassigned.length,
       showLegacyDivider:
-        clientFilter === "all" && active.length > 0 && legacy.length > 0,
+        clientFilter === "all" && active.length > 0 && unassigned.length > 0,
       entries: [
-        ...active.map((client) => ({ type: "client" as const, client })),
-        ...(clientFilter === "all" && active.length > 0 && legacy.length > 0
+        ...active.map((client) => ({
+          type: "client" as const,
+          client,
+          kind: "business" as const,
+        })),
+        ...(clientFilter === "all" && active.length > 0 && unassigned.length > 0
           ? [{ type: "divider" as const }]
           : []),
-        ...legacy.map((client) => ({ type: "client" as const, client })),
+        ...unassigned.map((client) => ({
+          type: "client" as const,
+          client,
+          kind: "unassigned" as const,
+        })),
       ],
     };
-  }, [mergedClients, clientSearchQuery, clientFilter]);
+  }, [businessClients, unassignedUploaders, clientSearchQuery, clientFilter]);
   const openTasksCount = useMemo(
     () => tasks.filter((task: any) => task.status !== "done").length,
     [tasks],
@@ -676,6 +881,17 @@ export default function AdminPortal() {
         project.client?.id === selectedClient,
     );
   }, [projects, selectedClient]);
+
+  const projectsForDisplay = useMemo(() => {
+    if (!selectedClient) return projects;
+    if (selectedIsBusinessClient) return clientProjectsForSelected;
+    return [];
+  }, [
+    selectedClient,
+    selectedIsBusinessClient,
+    projects,
+    clientProjectsForSelected,
+  ]);
 
   useEffect(() => {
     if (!selectedClient) {
@@ -691,7 +907,8 @@ export default function AdminPortal() {
 
     setPhaseProjectId((prev) => {
       const stillValid =
-        prev && clientProjectsForSelected.some((project: any) => project.id === prev);
+        prev &&
+        clientProjectsForSelected.some((project: any) => project.id === prev);
       return stillValid ? prev : clientProjectsForSelected[0].id;
     });
   }, [selectedClient, clientProjectsForSelected]);
@@ -812,7 +1029,9 @@ export default function AdminPortal() {
       unpaidTotal: filesLoading ? null : unpaidTotal,
       currentPhase: currentStatus,
       lastActivity,
-      isLegacy: selectedClientRow ? isLegacyClient(selectedClientRow) : false,
+      isLegacy: selectedClientRow
+        ? isUnassignedUploader(selectedClientRow)
+        : false,
       primaryLabel: selectedClientRow
         ? getClientPrimaryLabel(selectedClientRow)
         : `${selectedClient.substring(0, 8)}...`,
@@ -1006,8 +1225,8 @@ export default function AdminPortal() {
                       className="w-full bg-bg-body border border-white/10 p-2.5 text-sm text-white focus:border-gold-primary outline-none"
                     >
                       <option value="all">All Clients</option>
-                      <option value="active">Active Clients</option>
-                      <option value="legacy">Legacy Clients</option>
+                      <option value="active">Business Clients</option>
+                      <option value="legacy">Unassigned / Legacy Assets</option>
                     </select>
                   </div>
                   <div className="relative">
@@ -1076,7 +1295,7 @@ export default function AdminPortal() {
                     </>
                   ) : clientFilter === "active" ? (
                     <>
-                      <p className="text-text-gray text-xs">No active clients yet.</p>
+                      <p className="text-text-gray text-xs">No business clients yet.</p>
                       <p className="text-text-gray/50 text-[10px] mt-2 mb-4">
                         Provision a client with a name or email to see them here.
                       </p>
@@ -1090,9 +1309,9 @@ export default function AdminPortal() {
                     </>
                   ) : (
                     <>
-                      <p className="text-text-gray text-xs">No legacy clients found.</p>
+                      <p className="text-text-gray text-xs">No unassigned / legacy assets.</p>
                       <p className="text-text-gray/50 text-[10px] mt-2 mb-4">
-                        Legacy clients are asset-only records without a name or email.
+                        Orphan uploader IDs with no matching Prisma User appear here.
                       </p>
                       <button
                         type="button"
@@ -1113,7 +1332,7 @@ export default function AdminPortal() {
                           <li key="legacy-divider" className="py-1">
                             <div className="flex items-center gap-2 text-[9px] uppercase tracking-[0.2em] text-text-gray/60">
                               <span className="flex-1 border-t border-white/10" />
-                              <span>Legacy Clients</span>
+                              <span>Unassigned / Legacy Assets</span>
                               <span className="flex-1 border-t border-white/10" />
                             </div>
                           </li>
@@ -1123,7 +1342,7 @@ export default function AdminPortal() {
                       const client = entry.client;
                       const primaryLabel = getClientPrimaryLabel(client);
                       const secondaryLabel = getClientSecondaryLabel(client);
-                      const isLegacy = isLegacyClient(client);
+                      const isUnassigned = entry.kind === "unassigned";
 
                       return (
                         <li key={client.id}>
@@ -1135,17 +1354,13 @@ export default function AdminPortal() {
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0 flex-1">
                                 <span
-                                  className={`block truncate ${isLegacy ? "font-mono text-text-gray" : "text-white font-medium"}`}
+                                  className={`block truncate ${isUnassigned ? "text-text-gray" : "text-white font-medium"}`}
                                 >
                                   {primaryLabel}
                                 </span>
                                 {secondaryLabel ? (
-                                  <span className="block truncate text-[10px] text-text-gray/80 mt-1">
+                                  <span className={`block truncate text-[10px] mt-1 ${isUnassigned ? "text-text-gray/50 font-mono" : "text-text-gray/80"}`}>
                                     {secondaryLabel}
-                                  </span>
-                                ) : isLegacy ? (
-                                  <span className="block truncate text-[10px] text-text-gray/50 mt-1 font-mono">
-                                    {client.id}
                                   </span>
                                 ) : null}
                               </div>
@@ -1258,23 +1473,33 @@ export default function AdminPortal() {
                   <p className="text-center py-6 text-gold-primary text-xs uppercase tracking-widest">
                     Loading projects...
                   </p>
-                ) : projects.length === 0 ? (
+                ) : projectsForDisplay.length === 0 ? (
                   <div className="text-center py-10">
-                    <p className="text-text-gray text-xs">No projects yet.</p>
-                    <p className="text-text-gray/50 text-[10px] mt-2 mb-4">
-                      Create your first project to start managing production.
+                    <p className="text-text-gray text-xs">
+                      {selectedClient
+                        ? selectedIsBusinessClient
+                          ? "No projects for this client yet."
+                          : "Unassigned uploaders are not business clients — no project list."
+                        : "No projects yet."}
                     </p>
-                    <button
-                      type="button"
-                      onClick={() => setShowProjectForm(true)}
-                      className="text-[10px] bg-gold-primary/10 text-gold-primary border border-gold-primary/30 px-3 py-1.5 uppercase tracking-widest hover:bg-gold-primary hover:text-black transition-colors"
-                    >
-                      + New Project
-                    </button>
+                    {!selectedClient ? (
+                      <>
+                        <p className="text-text-gray/50 text-[10px] mt-2 mb-4">
+                          Create your first project to start managing production.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setShowProjectForm(true)}
+                          className="text-[10px] bg-gold-primary/10 text-gold-primary border border-gold-primary/30 px-3 py-1.5 uppercase tracking-widest hover:bg-gold-primary hover:text-black transition-colors"
+                        >
+                          + New Project
+                        </button>
+                      </>
+                    ) : null}
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {projects.map((proj: any) => {
+                    {projectsForDisplay.map((proj: any) => {
                       const projectTasks = tasks.filter(
                         (t: any) => t.projectId === proj.id || t.project?.id === proj.id,
                       );
@@ -1282,43 +1507,92 @@ export default function AdminPortal() {
                       const linkedVaultAssets = clientAssets.filter(
                         (asset) => asset.agencyProjectId === proj.id,
                       );
-                      const LINKED_ASSET_DISPLAY_LIMIT = 5;
 
                       return (
                         <div
                           key={proj.id}
-                          className="border border-white/5 bg-bg-body hover:border-gold-primary/20 transition-all"
+                          className="border border-white/5 bg-bg-body hover:border-gold-primary/20 transition-all overflow-hidden"
                         >
-                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 gap-3">
-                            <div className="min-w-0">
-                              <p className="text-text-white text-sm font-medium truncate">
-                                {proj.title}
-                              </p>
-                              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5">
+                          <div className="flex flex-col sm:flex-row justify-between items-start gap-3 p-4 pb-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="space-y-2">
+                                <div className="min-w-0">
+                                  <p className="text-[9px] uppercase tracking-[0.2em] text-text-gray">
+                                    Client
+                                  </p>
+                                  <p
+                                    className="text-text-white text-sm font-semibold tracking-wide truncate"
+                                    title={getProjectClientLabel(proj.client)}
+                                  >
+                                    {getProjectClientLabel(proj.client)}
+                                  </p>
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-[9px] uppercase tracking-[0.2em] text-text-gray">
+                                    Project
+                                  </p>
+                                  <p
+                                    className="text-gold-primary text-base font-semibold truncate"
+                                    title={proj.title}
+                                  >
+                                    {proj.title}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2">
                                 <span className="text-[10px] uppercase tracking-widest text-text-gray">
-                                  Status: <span className="text-gold-primary">{proj.status}</span>
-                                </span>
-                                {proj.client && (
-                                  <span className="text-[10px] uppercase tracking-widest text-text-gray">
-                                    Client: <span className="text-white">{proj.client.displayName || proj.client.email}</span>
+                                  Status:{" "}
+                                  <span className="text-gold-primary">
+                                    {proj.status}
                                   </span>
-                                )}
+                                </span>
                                 {proj._count && (
                                   <span className="text-[10px] uppercase tracking-widest text-text-gray">
-                                    {proj._count.tasks} task{proj._count.tasks === 1 ? "" : "s"} · {proj._count.assets} asset{proj._count.assets === 1 ? "" : "s"}
+                                    {proj._count.tasks} task
+                                    {proj._count.tasks === 1 ? "" : "s"} ·{" "}
+                                    {proj._count.assets} asset
+                                    {proj._count.assets === 1 ? "" : "s"}
                                   </span>
                                 )}
                               </div>
                               {proj.description && (
-                                <p className="text-[11px] text-text-gray mt-1 truncate max-w-md">
+                                <p
+                                  className="text-[11px] text-text-gray mt-1 truncate max-w-md"
+                                  title={proj.description}
+                                >
                                   {proj.description}
                                 </p>
                               )}
                             </div>
-                            <span className="text-[10px] text-text-gray uppercase tracking-widest shrink-0">
+                            <span className="text-[10px] text-text-gray uppercase tracking-widest shrink-0 sm:pt-1">
                               {new Date(proj.createdAt).toLocaleDateString()}
                             </span>
                           </div>
+
+                          <ProjectWorkflowSummary
+                            projectId={proj.id}
+                            clientId={proj.clientId ?? proj.client?.id ?? null}
+                            agencyUsers={agencyUsers}
+                            tasks={projectTasks}
+                            openFeedbackCount={
+                              projectOpenFeedbackCounts[proj.id] ?? 0
+                            }
+                          >
+                            <ProjectFeedbackSummary
+                              projectId={proj.id}
+                              onSummaryLoaded={(summary) => {
+                                setProjectOpenFeedbackCounts((prev) => {
+                                  if (prev[proj.id] === summary.open) {
+                                    return prev;
+                                  }
+                                  return {
+                                    ...prev,
+                                    [proj.id]: summary.open,
+                                  };
+                                });
+                              }}
+                            />
+                          </ProjectWorkflowSummary>
 
                           {/* Tasks under this project */}
                           <div className="border-t border-white/5 p-4 bg-black/10">
@@ -1454,11 +1728,21 @@ export default function AdminPortal() {
                                       <p className="text-text-white text-xs font-medium truncate">
                                         {task.title}
                                       </p>
+                                      <p className="text-[9px] text-text-gray mt-1">
+                                        Client:{" "}
+                                        <span className="text-white">
+                                          {getProjectClientLabel(proj.client)}
+                                        </span>
+                                        {" · "}
+                                        Project:{" "}
+                                        <span className="text-white">{proj.title}</span>
+                                      </p>
                                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
                                         <span className="text-[9px] uppercase tracking-widest text-text-gray">
-                                          {task.assignee
-                                            ? task.assignee.displayName || task.assignee.email
-                                            : "Unassigned"}
+                                          Editor:{" "}
+                                          <span className="text-white">
+                                            {getAssigneeLabel(task.assignee)}
+                                          </span>
                                         </span>
                                         {task.dueDate && (
                                           <span className="text-[9px] uppercase tracking-widest text-text-gray">
@@ -1486,34 +1770,76 @@ export default function AdminPortal() {
                             )}
                           </div>
 
-                          <div className="border-t border-white/5 p-4 bg-black/5">
-                            <p className="text-[10px] uppercase tracking-widest text-text-gray mb-2">
-                              Linked Vault Assets ({linkedVaultAssets.length})
-                            </p>
-                            {linkedVaultAssets.length === 0 ? (
-                              <p className="text-[11px] text-text-gray/60 italic">
-                                No vault assets linked yet.
+                          <div className="border-t border-white/5 bg-black/5">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedProjectAssets((prev) => ({
+                                  ...prev,
+                                  [proj.id]: !prev[proj.id],
+                                }))
+                              }
+                              className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-white/[0.02] transition-colors"
+                              aria-expanded={Boolean(
+                                expandedProjectAssets[proj.id],
+                              )}
+                            >
+                              <p className="text-[10px] uppercase tracking-widest text-text-gray">
+                                Project Assets ({linkedVaultAssets.length})
                               </p>
-                            ) : (
-                              <ul className="space-y-1">
-                                {linkedVaultAssets
-                                  .slice(0, LINKED_ASSET_DISPLAY_LIMIT)
-                                  .map((asset) => (
-                                    <li
-                                      key={asset.id}
-                                      className="text-[11px] text-text-white/80 font-mono truncate"
-                                    >
-                                      {asset.fileName}
-                                    </li>
-                                  ))}
-                                {linkedVaultAssets.length > LINKED_ASSET_DISPLAY_LIMIT ? (
-                                  <li className="text-[10px] text-text-gray">
-                                    +{linkedVaultAssets.length - LINKED_ASSET_DISPLAY_LIMIT}{" "}
-                                    more
-                                  </li>
-                                ) : null}
-                              </ul>
-                            )}
+                              <span
+                                className={`text-text-gray text-xs transition-transform ${
+                                  expandedProjectAssets[proj.id]
+                                    ? "rotate-90"
+                                    : ""
+                                }`}
+                                aria-hidden
+                              >
+                                ▸
+                              </span>
+                            </button>
+
+                            {expandedProjectAssets[proj.id] ? (
+                              <div className="px-4 pb-4">
+                                {linkedVaultAssets.length === 0 ? (
+                                  <p className="text-[11px] text-text-gray/60 italic">
+                                    No project assets linked yet.
+                                  </p>
+                                ) : (
+                                  <ul className="space-y-2">
+                                    {linkedVaultAssets.map((asset) => (
+                                      <li
+                                        key={asset.id}
+                                        className="text-[11px] text-text-white/80 min-w-0"
+                                      >
+                                        <p
+                                          className="font-mono truncate"
+                                          title={asset.fileName}
+                                        >
+                                          {asset.fileName}
+                                        </p>
+                                        <p
+                                          className="text-[10px] text-text-gray mt-0.5 truncate"
+                                          title={formatAssetAttributionLine(
+                                            asset,
+                                            agencyUsers,
+                                            proj.title,
+                                            proj.clientId ?? proj.client?.id,
+                                          )}
+                                        >
+                                          {formatAssetAttributionLine(
+                                            asset,
+                                            agencyUsers,
+                                            proj.title,
+                                            proj.clientId ?? proj.client?.id,
+                                          )}
+                                        </p>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </div>
+                            ) : null}
                           </div>
                         </div>
                       );
@@ -1575,8 +1901,8 @@ export default function AdminPortal() {
                           }`}
                         >
                           {selectedClientOverview.isLegacy
-                            ? "Legacy Client"
-                            : "Active Client"}
+                            ? "Unassigned / Legacy Assets"
+                            : "Business Client"}
                         </span>
                       </div>
 
@@ -1957,6 +2283,17 @@ export default function AdminPortal() {
                                     </span>
                                   ) : null}
                                 </div>
+                                <p className="text-[10px] text-text-gray mt-1 truncate max-w-[320px]">
+                                  {formatAssetAttributionLine(
+                                    asset,
+                                    agencyUsers,
+                                    clientProjectsForSelected.find(
+                                      (project: any) =>
+                                        project.id === asset.agencyProjectId,
+                                    )?.title,
+                                    selectedClient,
+                                  )}
+                                </p>
                               </div>
                               <div className="flex items-center gap-2">
                                 <select

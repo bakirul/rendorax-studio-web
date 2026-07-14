@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo, useState } from "react";
 import CommentAuthorBadge from "@/components/CommentAuthorBadge";
 import CommentSceneThumbnail from "@/components/CommentSceneThumbnail";
 import {
@@ -7,6 +7,8 @@ import {
 } from "@/utils/commentAuthor";
 import { type DisplayCommentRow } from "@/hooks/useLiveComments";
 
+type CommentFilter = "all" | "open" | "resolved";
+
 interface CommentsPanelProps {
   comments: DisplayCommentRow[];
   newComment: string;
@@ -14,6 +16,7 @@ interface CommentsPanelProps {
   handleAddComment: (e: React.FormEvent) => void;
   handleEditComment: (id: string, text: string) => void;
   handleDeleteComment: (id: string) => void;
+  handleResolveComment?: (id: string, resolved: boolean) => void;
   handleNotifyTeam: () => void;
   isNotifying: boolean;
   notificationSent: boolean;
@@ -23,6 +26,20 @@ interface CommentsPanelProps {
   disabled?: boolean;
 }
 
+function formatResolvedMeta(comment: VideoCommentRow): string | null {
+  if (!comment.is_resolved) return null;
+  const when = comment.resolved_at
+    ? new Date(comment.resolved_at).toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : null;
+  if (when) return `Resolved · ${when}`;
+  return "Resolved";
+}
+
 export default function CommentsPanel({
   comments,
   newComment,
@@ -30,6 +47,7 @@ export default function CommentsPanel({
   handleAddComment,
   handleEditComment,
   handleDeleteComment,
+  handleResolveComment,
   handleNotifyTeam,
   isNotifying,
   notificationSent,
@@ -38,6 +56,18 @@ export default function CommentsPanel({
   isLive = false,
   disabled = false,
 }: CommentsPanelProps) {
+  const [filter, setFilter] = useState<CommentFilter>("all");
+
+  const visibleComments = useMemo(() => {
+    if (filter === "open") {
+      return comments.filter((c) => !c.is_resolved);
+    }
+    if (filter === "resolved") {
+      return comments.filter((c) => Boolean(c.is_resolved));
+    }
+    return comments;
+  }, [comments, filter]);
+
   return (
     <aside className="w-full bg-[#121217] flex flex-col h-full border-l border-white/5 shrink-0 shadow-[-10px_0_30px_rgba(0,0,0,0.5)] z-10">
       <div className="h-14 flex items-center justify-between px-4 border-b border-white/5 shrink-0 bg-[#121217]">
@@ -45,7 +75,6 @@ export default function CommentsPanel({
           Comments
         </h3>
 
-        {/* Real-time Status Indicator */}
         <div className="flex items-center space-x-2">
           <div
             className={`h-2 w-2 rounded-full ${isLive ? "bg-green-500 animate-pulse" : "bg-red-500"}`}
@@ -56,102 +85,162 @@ export default function CommentsPanel({
         </div>
       </div>
 
+      {comments.length > 0 && (
+        <div className="flex items-center gap-1 px-4 py-2 border-b border-white/5 shrink-0">
+          {(
+            [
+              ["all", "All"],
+              ["open", "Open"],
+              ["resolved", "Resolved"],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setFilter(key)}
+              className={`px-2 py-0.5 text-[9px] uppercase tracking-widest transition-colors ${
+                filter === key
+                  ? "text-[#d4af37]"
+                  : "text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
-        {comments.length === 0 ? (
+        {visibleComments.length === 0 ? (
           <div className="h-full flex items-center justify-center text-xs text-gray-500 italic">
             {disabled
               ? "Select a video to view or add comments"
-              : "No feedback yet."}
+              : filter !== "all" && comments.length > 0
+                ? `No ${filter} comments.`
+                : "No feedback yet."}
           </div>
         ) : (
-          comments.map((comment) => (
-            <div
-              key={comment.id}
-              className="group my-2 flex items-start justify-between gap-2 rounded border border-zinc-800/50 bg-zinc-900/60 p-2"
-            >
-              <div className="flex min-w-0 flex-1 items-start gap-2.5">
-                {!disabled && (
-                  <CommentSceneThumbnail
-                    playbackUrl={playbackUrl}
-                    timestampSeconds={comment.time_stamp}
-                  />
-                )}
-                <div className="min-w-0 text-sm">
-                  <div className="mb-1 flex min-w-0 items-center gap-1.5">
-                    <CommentAuthorBadge
-                      displayName={getCommentDisplayName(comment)}
-                      avatarUrl={comment.author_avatar_url}
+          visibleComments.map((comment) => {
+            const resolved = Boolean(comment.is_resolved);
+            const resolvedMeta = formatResolvedMeta(comment);
+            return (
+              <div
+                key={comment.id}
+                className={`group my-2 flex items-start justify-between gap-2 rounded border border-zinc-800/50 bg-zinc-900/60 p-2 ${
+                  resolved ? "opacity-55" : ""
+                }`}
+              >
+                <div className="flex min-w-0 flex-1 items-start gap-2.5">
+                  {!disabled && (
+                    <CommentSceneThumbnail
+                      playbackUrl={playbackUrl}
+                      timestampSeconds={comment.time_stamp}
                     />
-                    <span className="truncate text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
-                      {getCommentDisplayName(comment)}
+                  )}
+                  <div className="min-w-0 text-sm">
+                    <div className="mb-1 flex min-w-0 flex-wrap items-center gap-1.5">
+                      <CommentAuthorBadge
+                        displayName={getCommentDisplayName(comment)}
+                        avatarUrl={comment.author_avatar_url}
+                      />
+                      <span className="truncate text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+                        {getCommentDisplayName(comment)}
+                      </span>
+                      <span
+                        className={`rounded px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-widest ${
+                          resolved
+                            ? "bg-zinc-700/80 text-zinc-300"
+                            : "bg-[#d4af37]/15 text-[#d4af37]"
+                        }`}
+                      >
+                        {resolved ? "Resolved" : "Open"}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => jumpToTime(comment.time_stamp)}
+                      className="text-[#d4af37] font-mono mr-2 hover:underline focus:outline-none"
+                    >
+                      {Math.floor(comment.time_stamp / 60)}:
+                      {("0" + Math.floor(comment.time_stamp % 60)).slice(-2)}
+                    </button>
+                    <span className="text-zinc-200">
+                      {comment.display_text || comment.comment_text}
                     </span>
+                    {comment.translated && (
+                      <span className="ml-2 text-[9px] uppercase tracking-wide text-zinc-500">
+                        Translated
+                      </span>
+                    )}
+                    {comment.translationFailed && (
+                      <span className="ml-2 text-[9px] uppercase tracking-wide text-zinc-500">
+                        Translation unavailable
+                      </span>
+                    )}
+                    {resolvedMeta && (
+                      <p className="mt-1 text-[9px] uppercase tracking-wide text-zinc-500">
+                        {resolvedMeta}
+                      </p>
+                    )}
+                    {!disabled && handleResolveComment && (
+                      <div className="mt-1.5">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleResolveComment(comment.id, !resolved)
+                          }
+                          className="text-[9px] uppercase tracking-widest text-zinc-400 hover:text-[#d4af37] transition-colors"
+                        >
+                          {resolved ? "Reopen" : "Resolve"}
+                        </button>
+                      </div>
+                    )}
                   </div>
+                </div>
+                <div className="flex items-center space-x-1 md:opacity-0 group-hover:opacity-100 transition-opacity duration-150">
                   <button
-                    onClick={() => jumpToTime(comment.time_stamp)}
-                    className="text-[#d4af37] font-mono mr-2 hover:underline focus:outline-none"
+                    onClick={() =>
+                      handleEditComment(comment.id, comment.comment_text)
+                    }
+                    className="text-zinc-500 hover:text-[#d4af37] p-1 rounded transition-colors"
+                    title="Edit"
                   >
-                    {Math.floor(comment.time_stamp / 60)}:
-                    {("0" + Math.floor(comment.time_stamp % 60)).slice(-2)}
+                    <svg
+                      className="h-4 w-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                      />
+                    </svg>
                   </button>
-                  <span className="text-zinc-200">
-                    {comment.display_text || comment.comment_text}
-                  </span>
-                  {comment.translated && (
-                    <span className="ml-2 text-[9px] uppercase tracking-wide text-zinc-500">
-                      Translated
-                    </span>
-                  )}
-                  {comment.translationFailed && (
-                    <span className="ml-2 text-[9px] uppercase tracking-wide text-zinc-500">
-                      Translation unavailable
-                    </span>
-                  )}
+                  <button
+                    onClick={() => handleDeleteComment(comment.id)}
+                    className="text-zinc-500 hover:text-red-500 p-1 rounded transition-colors"
+                    title="Delete"
+                  >
+                    <svg
+                      className="h-4 w-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                      />
+                    </svg>
+                  </button>
                 </div>
               </div>
-              <div className="flex items-center space-x-1 md:opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                <button
-                  onClick={() =>
-                    handleEditComment(comment.id, comment.comment_text)
-                  }
-                  className="text-zinc-500 hover:text-[#d4af37] p-1 rounded transition-colors"
-                  title="Edit"
-                >
-                  <svg
-                    className="h-4 w-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                    />
-                  </svg>
-                </button>
-                <button
-                  onClick={() => handleDeleteComment(comment.id)}
-                  className="text-zinc-500 hover:text-red-500 p-1 rounded transition-colors"
-                  title="Delete"
-                >
-                  <svg
-                    className="h-4 w-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                    />
-                  </svg>
-                </button>
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 

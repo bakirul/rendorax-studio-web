@@ -110,6 +110,12 @@ io.on("connection", (socket) => {
     socket.to(data.fileId).emit("comment-added", data);
   });
 
+  socket.on("comment-updated", (data) => {
+    if (data?.fileId) {
+      socket.to(data.fileId).emit("comment-updated", data);
+    }
+  });
+
   // ==========================================
   // 🎥 WebRTC SIGNALING FOR VOICE/VIDEO CALLS (LiveSessionWidget)
   // ==========================================

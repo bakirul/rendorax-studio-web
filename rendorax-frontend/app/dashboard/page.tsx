@@ -29,9 +29,12 @@ import TimelineShareWidget from "@/components/TimelineShareWidget";
 import RenameModal from "@/components/modals/RenameModal";
 import DeleteModal from "@/components/modals/DeleteModal";
 import MoveModal from "@/components/modals/MoveModal";
-import { saveMediaAsset, fetchMediaAssets, buildMediaAssetFetchParams, mediaFolderForSave, getMediaPlaybackUrl, isMediaAssetProcessing, deleteMediaAsset, updateMediaAsset, type MediaAssetRecord } from "@/utils/mediaAssets";
+import { saveMediaAsset, fetchMediaAssets, buildMediaAssetFetchParams, getMediaPlaybackUrl, isMediaAssetProcessing, deleteMediaAsset, updateMediaAsset, type MediaAssetRecord } from "@/utils/mediaAssets";
+import { PROJECT_ASSET_FOLDER, isReviewVersionAsset } from "@/utils/projectAssetFolders";
 import { sanitizeAbsoluteMediaUrl } from "@/utils/mediaAssets";
 import CloudAssetGallery from "@/components/dashboard/CloudAssetGallery";
+import ReviewDecisionBar from "@/components/dashboard/ReviewDecisionBar";
+import PictureLockBar from "@/components/dashboard/PictureLockBar";
 import GalleryBulkActionBar from "@/components/dashboard/GalleryBulkActionBar";
 import ToastHost from "@/components/ToastHost";
 import { useGalleryViewStyles } from "@/hooks/useGalleryViewStyles";
@@ -112,6 +115,68 @@ const TASK_STATUS_ACTION_LABELS: Record<
   in_progress: "Send to Review",
   in_review: "Mark Complete",
 };
+
+function getProjectClientLabel(
+  client: { displayName?: string | null; email?: string } | null | undefined,
+): string {
+  const displayName = client?.displayName?.trim();
+  if (displayName) return displayName;
+
+  const email = client?.email?.trim();
+  if (email) return email;
+
+  return "Unassigned Client";
+}
+
+function formatEditorProjectOptionLabel(project: {
+  title: string;
+  client: { displayName?: string | null; email?: string } | null | undefined;
+}): string {
+  const clientLabel = getProjectClientLabel(project.client);
+  if (clientLabel === "Unassigned Client") return project.title;
+  return `${clientLabel} — ${project.title}`;
+}
+
+type ProjectAssetClass =
+  | "client_materials"
+  | "working_files"
+  | "review_versions";
+
+/** Rule A + Review folder: mutually exclusive project asset classes. */
+function isClientMaterialsAsset(
+  asset: { userId?: string | null } | null | undefined,
+  projectClientId: string,
+): boolean {
+  return Boolean(asset?.userId) && asset!.userId === projectClientId;
+}
+
+function matchesProjectAssetClass(
+  asset:
+    | {
+        userId?: string | null;
+        folder?: string | null;
+        agencyProjectId?: string | null;
+      }
+    | null
+    | undefined,
+  projectClientId: string,
+  assetClass: ProjectAssetClass,
+): boolean {
+  if (!asset) return false;
+
+  const isReview = isReviewVersionAsset(asset);
+
+  switch (assetClass) {
+    case "review_versions":
+      return isReview;
+    case "client_materials":
+      return !isReview && isClientMaterialsAsset(asset, projectClientId);
+    case "working_files":
+      return !isReview && !isClientMaterialsAsset(asset, projectClientId);
+    default:
+      return false;
+  }
+}
 
 const PIPELINE_STATUSES = [
   "Awaiting Assets",
@@ -318,6 +383,8 @@ export default function DashboardPage() {
   // Active Project selector (Operations Core — Step 5: link uploads to a project)
   const [activeProjectId, setActiveProjectId] = useState<string>("");
   const [assetViewScope, setAssetViewScope] = useState<"all" | "active">("all");
+  const [projectAssetClass, setProjectAssetClass] =
+    useState<ProjectAssetClass>("client_materials");
 
   type ClientProject = { id: string; title: string; status: string };
   const [clientProjects, setClientProjects] = useState<ClientProject[]>([]);
@@ -391,14 +458,102 @@ export default function DashboardPage() {
   ]);
 
   const availableProjects = useMemo(() => {
-    const seen = new Map<string, { id: string; title: string }>();
+    const seen = new Map<
+      string,
+      {
+        id: string;
+        title: string;
+        client: {
+          id: string;
+          displayName: string | null;
+          email: string;
+        } | null;
+      }
+    >();
     for (const task of editorTasks) {
       if (task.project?.id && !seen.has(task.project.id)) {
-        seen.set(task.project.id, { id: task.project.id, title: task.project.title });
+        seen.set(task.project.id, {
+          id: task.project.id,
+          title: task.project.title,
+          client: task.project.client,
+        });
       }
     }
     return Array.from(seen.values());
   }, [editorTasks]);
+
+  const activeEditorProject = useMemo(
+    () => availableProjects.find((project) => project.id === activeProjectId) ?? null,
+    [availableProjects, activeProjectId],
+  );
+
+  const editorProjectAssetsContextLabel = useMemo(() => {
+    if (!isEditor || assetViewScope !== "active" || !activeEditorProject) {
+      return null;
+    }
+
+    const clientLabel = getProjectClientLabel(activeEditorProject.client);
+    if (clientLabel === "Unassigned Client") {
+      return `Project Assets — ${activeEditorProject.title}`;
+    }
+
+    return `Project Assets — ${clientLabel} · ${activeEditorProject.title}`;
+  }, [isEditor, assetViewScope, activeEditorProject]);
+
+  const projectClientIdForClassification = useMemo(() => {
+    if (!activeProjectId) return null;
+    if (isEditor) {
+      return activeEditorProject?.client?.id?.trim() || null;
+    }
+    return user?.id?.trim() || null;
+  }, [activeProjectId, isEditor, activeEditorProject, user?.id]);
+
+  /** Project Assets taxonomy only when viewing a selected project (editors: Project Assets scope). */
+  const isProjectAssetsClassificationActive = Boolean(
+    activeProjectId &&
+      projectClientIdForClassification &&
+      (!isEditor || assetViewScope === "active"),
+  );
+
+  const effectiveProjectAssetClass = projectAssetClass;
+
+  const reviewVersionsContextLabel = useMemo(() => {
+    if (
+      !isProjectAssetsClassificationActive ||
+      effectiveProjectAssetClass !== "review_versions"
+    ) {
+      return null;
+    }
+
+    if (isEditor && activeEditorProject) {
+      const clientLabel = getProjectClientLabel(activeEditorProject.client);
+      if (clientLabel === "Unassigned Client") {
+        return `Review Versions — ${activeEditorProject.title}`;
+      }
+      return `Review Versions — ${clientLabel} · ${activeEditorProject.title}`;
+    }
+
+    if (!isEditor && activeProjectId) {
+      const project = clientProjects.find((entry) => entry.id === activeProjectId);
+      if (!project) return "Review Versions";
+      return `Review Versions — ${project.title}`;
+    }
+
+    return null;
+  }, [
+    isProjectAssetsClassificationActive,
+    effectiveProjectAssetClass,
+    isEditor,
+    activeEditorProject,
+    activeProjectId,
+    clientProjects,
+  ]);
+
+  useEffect(() => {
+    if (!isProjectAssetsClassificationActive) {
+      setProjectAssetClass("client_materials");
+    }
+  }, [isProjectAssetsClassificationActive, activeProjectId]);
 
   // Project Progress Logic (AgencyProject.status)
   const [projectPhase, setProjectPhase] = useState("Awaiting Assets");
@@ -507,6 +662,20 @@ export default function DashboardPage() {
     }
   }, [activeProjectId, assetViewScope]);
 
+  useEffect(() => {
+    if (!isEditor) return;
+
+    const prevProjectId = prevEditorProjectIdRef.current;
+    if (prevProjectId === activeProjectId) return;
+    prevEditorProjectIdRef.current = activeProjectId;
+
+    if (activeProjectId) {
+      setAssetViewScope("active");
+    } else {
+      setAssetViewScope("all");
+    }
+  }, [isEditor, activeProjectId]);
+
   // Refs
   const videoRef = useRef<HTMLVideoElement>(null);
   const compareVideoRef = useRef<HTMLVideoElement>(null);
@@ -557,6 +726,7 @@ export default function DashboardPage() {
   const [cloudAssetsLoading, setCloudAssetsLoading] = useState(false);
   const cloudAssetsLoadGenRef = useRef(0);
   const prevClientProjectIdRef = useRef(activeProjectId);
+  const prevEditorProjectIdRef = useRef(activeProjectId);
 
   const applyProjectFilterToFetchParams = useCallback(
     (params: ReturnType<typeof buildMediaAssetFetchParams>) => {
@@ -609,6 +779,7 @@ export default function DashboardPage() {
     handleAddComment,
     handleDeleteComment,
     handleEditComment,
+    handleResolveComment,
     handleNotifyTeam,
     handleCompileAndSend,
     handleDownloadReport,
@@ -1219,6 +1390,7 @@ export default function DashboardPage() {
       isVideo,
       isCdn: activeBin === "cloud",
       assetId: asset?.id,
+      agencyProjectId: asset?.agencyProjectId ?? activeProjectId ?? null,
       previewKey: asset?.id ?? fileName,
     });
     setIsCompareMode(false);
@@ -1380,7 +1552,7 @@ export default function DashboardPage() {
         objectKey: result.objectKey,
         mimeType: file.type || "application/octet-stream",
         userId: user.id,
-        folder: mediaFolderForSave(currentFolder),
+        folder: PROJECT_ASSET_FOLDER.REVIEW,
         fileSize: file.size,
         agencyProjectId: activeProjectId || undefined,
       });
@@ -1394,11 +1566,9 @@ export default function DashboardPage() {
     },
     [
       user,
-      currentFolder,
       setActiveBin,
       fetchAllFolders,
       fetchAndSetCloudAssets,
-      isEditor,
       activeProjectId,
     ],
   );
@@ -1436,12 +1606,20 @@ export default function DashboardPage() {
         isVideo,
         isCdn: true,
         assetId: asset.id,
+        agencyProjectId: asset.agencyProjectId ?? activeProjectId ?? null,
         previewKey: asset.id,
       });
       setIsCompareMode(false);
       setCompareFile(null);
     },
-    [previewFile, handleTogglePlay, setPreviewFile, setIsCompareMode, setCompareFile],
+    [
+      previewFile,
+      handleTogglePlay,
+      setPreviewFile,
+      setIsCompareMode,
+      setCompareFile,
+      activeProjectId,
+    ],
   );
 
   const loadCloudAssets = useCallback(async () => {
@@ -1547,7 +1725,7 @@ export default function DashboardPage() {
 
   const galleryTitle = (() => {
     if (isClientVaultRootSelected) {
-      return "Client Vault";
+      return "Project Assets";
     }
 
     const folderLabel = currentFolder
@@ -1555,9 +1733,13 @@ export default function DashboardPage() {
       : null;
 
     if (activeBin === "cloud") {
-      return folderLabel ? `CDN / ${folderLabel}` : "All CDN Assets";
+      return folderLabel
+        ? `Review & Delivery / ${folderLabel}`
+        : "All Review & Delivery";
     }
-    return folderLabel ? `Vault / ${folderLabel}` : "All Local Assets";
+    return folderLabel
+      ? `Asset Library / ${folderLabel}`
+      : "All Library Assets";
   })();
 
   const playerControlsDisabled = !previewFile?.isVideo;
@@ -1575,8 +1757,47 @@ export default function DashboardPage() {
     const originalName = item.name
       .substring(item.name.indexOf("_") + 1)
       .toLowerCase();
-    return originalName.includes((searchQuery || "").toLowerCase());
+    if (!originalName.includes((searchQuery || "").toLowerCase())) {
+      return false;
+    }
+    if (
+      !isProjectAssetsClassificationActive ||
+      !projectClientIdForClassification
+    ) {
+      return true;
+    }
+    const asset =
+      vaultAssetsByName[item.name] ??
+      (item.id
+        ? Object.values(vaultAssetsByName).find((entry) => entry.id === item.id)
+        : undefined);
+    return matchesProjectAssetClass(
+      asset,
+      projectClientIdForClassification,
+      effectiveProjectAssetClass,
+    );
   });
+
+  const classifiedCloudAssets = useMemo(() => {
+    if (
+      !isProjectAssetsClassificationActive ||
+      !projectClientIdForClassification
+    ) {
+      return cloudAssets;
+    }
+    return cloudAssets.filter((asset) =>
+      matchesProjectAssetClass(
+        asset,
+        projectClientIdForClassification,
+        effectiveProjectAssetClass,
+      ),
+    );
+  }, [
+    cloudAssets,
+    isProjectAssetsClassificationActive,
+    projectClientIdForClassification,
+    effectiveProjectAssetClass,
+  ]);
 
   const clientProjectHasNoAssets =
     !isEditor &&
@@ -1584,17 +1805,33 @@ export default function DashboardPage() {
     !clientProjectsLoading &&
     !isClientVaultRootSelected &&
     (activeBin === "cloud"
-      ? !cloudAssetsLoading && cloudAssets.length === 0
+      ? !cloudAssetsLoading && classifiedCloudAssets.length === 0
       : !vaultFetchLoading &&
         filteredFiles.length === 0 &&
         folders.length === 0);
 
-  const allVideoFiles = (files || []).filter(
-    (f) => f?.name?.match(/\.(mp4|webm|ogg|mov|mxf)$/i) !== null,
-  );
+  const allVideoFiles = (files || []).filter((f) => {
+    if (f?.name?.match(/\.(mp4|webm|ogg|mov|mxf)$/i) === null) return false;
+    if (
+      !isProjectAssetsClassificationActive ||
+      !projectClientIdForClassification
+    ) {
+      return true;
+    }
+    const asset =
+      vaultAssetsByName[f.name] ??
+      (f.id
+        ? Object.values(vaultAssetsByName).find((entry) => entry.id === f.id)
+        : undefined);
+    return matchesProjectAssetClass(
+      asset,
+      projectClientIdForClassification,
+      effectiveProjectAssetClass,
+    );
+  });
 
   const compareVideoOptions = useMemo(() => {
-    const cloudOptions = cloudAssets
+    const cloudOptions = classifiedCloudAssets
       .filter((asset) => getMediaFileCategory(asset.fileName) === "video")
       .filter((asset) => asset.id !== previewFile?.assetId)
       .map((asset) => ({
@@ -1610,7 +1847,21 @@ export default function DashboardPage() {
       }));
 
     return [...cloudOptions, ...vaultOptions];
-  }, [cloudAssets, allVideoFiles, previewFile?.assetId]);
+  }, [classifiedCloudAssets, allVideoFiles, previewFile?.assetId]);
+
+  const previewReviewAsset = useMemo(() => {
+    if (!previewFile?.assetId || !previewFile.isCdn) return null;
+    const asset = cloudAssets.find((item) => item.id === previewFile.assetId);
+    if (!asset || !isReviewVersionAsset(asset)) return null;
+    return asset;
+  }, [previewFile?.assetId, previewFile?.isCdn, cloudAssets]);
+
+  const reviewDecisionViewerRole = useMemo((): "client" | "editor" | "admin" => {
+    const role = user?.app_metadata?.role;
+    if (role === "admin") return "admin";
+    if (role === "editor") return "editor";
+    return "client";
+  }, [user]);
 
   const renderCompareSelect = () => (
     <select
@@ -1787,38 +2038,44 @@ export default function DashboardPage() {
                   <option value="">No project (unlinked)</option>
                   {availableProjects.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.title}
+                      {formatEditorProjectOptionLabel({
+                        title: p.title,
+                        client: p.client,
+                      })}
                     </option>
                   ))}
                 </select>
-                {activeProjectId ? (
-                  <div className="flex border border-white/10 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setAssetViewScope("all")}
-                      className={`text-[9px] uppercase tracking-widest px-2 py-1 transition-colors ${
-                        assetViewScope === "all"
-                          ? "bg-[#d4af37]/20 text-[#d4af37]"
-                          : "text-gray-500 hover:text-gray-300"
-                      }`}
-                      title="Show all accessible assets"
-                    >
-                      All
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setAssetViewScope("active")}
-                      className={`text-[9px] uppercase tracking-widest px-2 py-1 transition-colors ${
-                        assetViewScope === "active"
-                          ? "bg-[#d4af37]/20 text-[#d4af37]"
-                          : "text-gray-500 hover:text-gray-300"
-                      }`}
-                      title="Show only assets linked to the active project"
-                    >
-                      Project
-                    </button>
-                  </div>
-                ) : null}
+                <div className="flex border border-white/10 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setAssetViewScope("all")}
+                    className={`text-[9px] uppercase tracking-widest px-2 py-1 transition-colors ${
+                      assetViewScope === "all"
+                        ? "bg-[#d4af37]/20 text-[#d4af37]"
+                        : "text-gray-500 hover:text-gray-300"
+                    }`}
+                    title="Show only assets you uploaded"
+                  >
+                    My Uploads
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAssetViewScope("active")}
+                    disabled={!activeProjectId}
+                    className={`text-[9px] uppercase tracking-widest px-2 py-1 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                      assetViewScope === "active"
+                        ? "bg-[#d4af37]/20 text-[#d4af37]"
+                        : "text-gray-500 hover:text-gray-300"
+                    }`}
+                    title={
+                      activeProjectId
+                        ? "Show all assets linked to the active project"
+                        : "Select a project to view project assets"
+                    }
+                  >
+                    Project Assets
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -1855,10 +2112,14 @@ export default function DashboardPage() {
                           : task.status === "in_progress"
                             ? "border-[#d4af37]/30 bg-[#d4af37]/10 text-[#d4af37]"
                             : "border-white/10 bg-white/5 text-gray-400";
-                    const clientLabel =
-                      task.project?.client?.displayName ||
-                      task.project?.client?.email ||
-                      null;
+                    const clientLabel = task.project
+                      ? getProjectClientLabel(task.project.client)
+                      : null;
+                    const projectContextLabel = task.project
+                      ? clientLabel === "Unassigned Client"
+                        ? task.project.title
+                        : `${clientLabel} · ${task.project.title}`
+                      : null;
 
                     return (
                       <li
@@ -1875,20 +2136,15 @@ export default function DashboardPage() {
                             </p>
                           ) : null}
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
-                            {task.project ? (
+                            {projectContextLabel ? (
                               <button
                                 type="button"
                                 onClick={() => setActiveProjectId(task.project!.id)}
                                 className="text-[9px] uppercase tracking-widest text-gray-500 hover:text-[#d4af37] transition-colors"
                                 title="Set as active project"
                               >
-                                {task.project.title}
+                                {projectContextLabel}
                               </button>
-                            ) : null}
-                            {clientLabel ? (
-                              <span className="text-[9px] uppercase tracking-widest text-gray-500">
-                                {clientLabel}
-                              </span>
                             ) : null}
                             {task.dueDate ? (
                               <span className="text-[9px] uppercase tracking-widest text-gray-500">
@@ -1958,6 +2214,7 @@ export default function DashboardPage() {
                   handleAddComment={handleAddComment}
                   handleEditComment={handleEditComment}
                   handleDeleteComment={handleDeleteComment}
+                  handleResolveComment={handleResolveComment}
                   handleNotifyTeam={handleNotifyTeam}
                   isNotifying={isNotifying}
                   notificationSent={notificationSent}
@@ -2011,11 +2268,63 @@ export default function DashboardPage() {
                 className={`flex flex-col bg-[#050505] shrink-0 w-full max-lg:!w-full lg:shrink-0 h-auto lg:h-full min-h-0 relative transition-none custom-scrollbar ${previewFile ? "hidden lg:flex" : "flex"}`}
                 style={{ width: `${leftPaneWidth}%` }}
               >
-                <div className="w-full h-14 flex items-center justify-between px-6 border-b border-white/5 bg-[#121217] shrink-0 z-20 relative">
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-sm font-medium text-gray-200 whitespace-nowrap">
-                      {galleryTitle}
-                    </h2>
+                <div className="w-full min-h-14 flex items-center justify-between px-6 py-2 border-b border-white/5 bg-[#121217] shrink-0 z-20 relative">
+                  <div className="flex min-w-0 flex-col gap-0.5">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <h2 className="text-sm font-medium text-gray-200 whitespace-nowrap">
+                        {galleryTitle}
+                      </h2>
+                    </div>
+                    {editorProjectAssetsContextLabel &&
+                    effectiveProjectAssetClass !== "review_versions" ? (
+                      <p className="text-[10px] uppercase tracking-widest text-gray-500 truncate max-w-[360px]">
+                        {editorProjectAssetsContextLabel}
+                      </p>
+                    ) : null}
+                    {reviewVersionsContextLabel ? (
+                      <p className="text-[10px] uppercase tracking-widest text-gray-500 truncate max-w-[360px]">
+                        {reviewVersionsContextLabel}
+                      </p>
+                    ) : null}
+                    {isProjectAssetsClassificationActive ? (
+                      <div className="flex flex-wrap items-center gap-1 mt-1">
+                        <button
+                          type="button"
+                          onClick={() => setProjectAssetClass("client_materials")}
+                          className={`text-[9px] uppercase tracking-widest px-2 py-1 border transition-colors ${
+                            projectAssetClass === "client_materials"
+                              ? "border-[#d4af37]/40 bg-[#d4af37]/15 text-[#d4af37]"
+                              : "border-white/10 text-gray-500 hover:text-gray-300"
+                          }`}
+                        >
+                          Client Materials
+                        </button>
+                        {isEditor ? (
+                          <button
+                            type="button"
+                            onClick={() => setProjectAssetClass("working_files")}
+                            className={`text-[9px] uppercase tracking-widest px-2 py-1 border transition-colors ${
+                              projectAssetClass === "working_files"
+                                ? "border-[#d4af37]/40 bg-[#d4af37]/15 text-[#d4af37]"
+                                : "border-white/10 text-gray-500 hover:text-gray-300"
+                            }`}
+                          >
+                            Working Files
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          onClick={() => setProjectAssetClass("review_versions")}
+                          className={`text-[9px] uppercase tracking-widest px-2 py-1 border transition-colors ${
+                            projectAssetClass === "review_versions"
+                              ? "border-[#d4af37]/40 bg-[#d4af37]/15 text-[#d4af37]"
+                              : "border-white/10 text-gray-500 hover:text-gray-300"
+                          }`}
+                        >
+                          Review Versions
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                   <div className="flex items-center gap-4">
                     {activeBin !== "root" && (
@@ -2067,8 +2376,8 @@ export default function DashboardPage() {
                             Select a folder from the sidebar
                           </p>
                           <p className="mt-2 max-w-xs text-[11px] leading-relaxed text-gray-600">
-                            Open Cloud Delivery or Vault inside Client Vault to
-                            browse assets.
+                            Choose Asset Library or Review & Delivery inside
+                            Project Assets.
                           </p>
                         </>
                       )}
@@ -2087,20 +2396,20 @@ export default function DashboardPage() {
                         <div className="mb-4 flex items-center justify-between">
                           <div>
                             <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-[#d4af37]">
-                              Cloud Delivery
+                              Review & Delivery
                             </p>
                             <h3 className="mt-1 text-sm font-medium text-gray-200">
-                              CDN Assets
+                              Review versions and final delivery
                             </h3>
                           </div>
                           <span className="rounded-full border border-white/10 bg-[#121217] px-2.5 py-1 text-[10px] text-gray-500">
-                            {cloudAssets.length} file
-                            {cloudAssets.length === 1 ? "" : "s"}
+                            {classifiedCloudAssets.length} file
+                            {classifiedCloudAssets.length === 1 ? "" : "s"}
                           </span>
                         </div>
                         <GalleryBulkActionBar label="cloud" />
                         <CloudAssetGallery
-                          assets={cloudAssets}
+                          assets={classifiedCloudAssets}
                           loading={cloudAssetsLoading}
                           searchQuery={searchQuery}
                           isEditor={isEditor}
@@ -2113,10 +2422,10 @@ export default function DashboardPage() {
                       <section>
                         <div className="mb-4">
                           <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-[#d4af37]">
-                            Vault
+                            Asset Library
                           </p>
                           <h3 className="mt-1 text-sm font-medium text-gray-200">
-                            Local Storage
+                            Source and working assets
                           </h3>
                         </div>
                         <GalleryBulkActionBar label="vault" />
@@ -2171,39 +2480,55 @@ export default function DashboardPage() {
                 {previewFile && (
                   <>
                     {previewFile.isVideo && previewFile.isCdn && (
-                      <div className="w-full bg-[#1c1c24] border-b border-[#d4af37]/20 px-4 py-3 flex items-center justify-between z-30 shrink-0 shadow-md">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <button
-                            onClick={() => setPreviewFile(null)}
-                            className="shrink-0 flex items-center justify-center w-7 h-7 rounded-full bg-black/60 hover:bg-red-500 text-white transition-colors border border-white/10"
-                            title="Close Preview"
-                          >
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              width="14"
-                              height="14"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
+                      <>
+                        <div className="w-full bg-[#1c1c24] border-b border-[#d4af37]/20 px-4 py-3 flex items-center justify-between z-30 shrink-0 shadow-md">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <button
+                              onClick={() => setPreviewFile(null)}
+                              className="shrink-0 flex items-center justify-center w-7 h-7 rounded-full bg-black/60 hover:bg-red-500 text-white transition-colors border border-white/10"
+                              title="Close Preview"
                             >
-                              <line x1="18" y1="6" x2="6" y2="18" />
-                              <line x1="6" y1="6" x2="18" y2="18" />
-                            </svg>
-                          </button>
-                          <div className="min-w-0">
-                            <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-[#d4af37]">
-                              CDN Preview
-                            </p>
-                            <p className="truncate text-sm text-white">{previewFile.name}</p>
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                width="14"
+                                height="14"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                              >
+                                <line x1="18" y1="6" x2="6" y2="18" />
+                                <line x1="6" y1="6" x2="18" y2="18" />
+                              </svg>
+                            </button>
+                            <div className="min-w-0">
+                              <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-[#d4af37]">
+                                Review Preview
+                              </p>
+                              <p className="truncate text-sm text-white">{previewFile.name}</p>
+                            </div>
                           </div>
+                          {flags?.enable_compare_mode && (
+                            <div className="flex items-center gap-2 shrink-0">
+                              {renderCompareSelect()}
+                            </div>
+                          )}
                         </div>
-                        {flags?.enable_compare_mode && (
-                          <div className="flex items-center gap-2 shrink-0">
-                            {renderCompareSelect()}
-                          </div>
-                        )}
-                      </div>
+                        {previewReviewAsset ? (
+                          <>
+                            <ReviewDecisionBar
+                              key={`decision-${previewReviewAsset.id}`}
+                              mediaAssetId={previewReviewAsset.id}
+                              viewerRole={reviewDecisionViewerRole}
+                            />
+                            <PictureLockBar
+                              key={`lock-${previewReviewAsset.id}`}
+                              mediaAssetId={previewReviewAsset.id}
+                              viewerRole={reviewDecisionViewerRole}
+                            />
+                          </>
+                        ) : null}
+                      </>
                     )}
 
                     {previewFile.isVideo && !previewFile.isCdn && (
@@ -2584,6 +2909,7 @@ export default function DashboardPage() {
                           handleAddComment={handleAddComment}
                           handleEditComment={handleEditComment}
                           handleDeleteComment={handleDeleteComment}
+                          handleResolveComment={handleResolveComment}
                           handleNotifyTeam={handleNotifyTeam}
                           isNotifying={isNotifying}
                           notificationSent={notificationSent}

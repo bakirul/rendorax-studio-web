@@ -12,6 +12,11 @@ export interface VideoCommentRow {
   author_display_name?: string | null;
   author_avatar_url?: string | null;
   created_at?: string;
+  media_asset_id?: string | null;
+  agency_project_id?: string | null;
+  is_resolved?: boolean;
+  resolved_at?: string | null;
+  resolved_by?: string | null;
 }
 
 type SessionUserLike = {

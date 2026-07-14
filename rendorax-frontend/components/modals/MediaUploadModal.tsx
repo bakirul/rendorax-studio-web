@@ -33,11 +33,15 @@ export default function MediaUploadModal({
         <div className="mb-5 flex items-center justify-between">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-[#d4af37]">
-              Cloud Delivery
+              Review Versions
             </p>
             <h2 className="mt-1 text-sm font-semibold text-white">
-              Upload to Cloud
+              Upload Review Version
             </h2>
+            <p className="mt-1.5 text-[11px] leading-relaxed text-gray-500">
+              Upload a project-linked version for client review, comments,
+              comparison, and approval.
+            </p>
           </div>
           <button
             type="button"

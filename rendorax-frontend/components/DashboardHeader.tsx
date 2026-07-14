@@ -217,13 +217,13 @@ export default function DashboardHeader({
             >
               <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
             </svg>
-            Upload to Cloud
+            Upload Review Version
           </button>
 
           <button
             onClick={() => setIsR2ModalOpen(true)}
             className="sm:hidden flex items-center justify-center border border-[#d4af37]/40 bg-[#1c1c24] text-[#d4af37] p-2 rounded-md shadow-[0_0_15px_rgba(212,175,55,0.1)]"
-            aria-label="Upload to Cloud"
+            aria-label="Upload Review Version"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -244,12 +244,13 @@ export default function DashboardHeader({
             onClick={() => inputRef.current?.click()}
             className="hidden sm:block text-[11px] uppercase tracking-widest bg-[#d4af37] hover:bg-[#b8952b] text-black px-5 py-2.5 font-bold rounded-md shadow-md"
           >
-            Upload File
+            Upload Asset
           </button>
 
           <button
             onClick={() => inputRef.current?.click()}
             className="sm:hidden text-[11px] bg-[#d4af37] text-black p-2 rounded-md shadow-md"
+            aria-label="Upload Asset"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"

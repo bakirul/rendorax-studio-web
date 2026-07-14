@@ -7,6 +7,9 @@ import {
 } from "../middleware/requireAuth";
 import { ensureAgencyUser, mapSupabaseRoleToAgencyRole } from "../lib/agencyUsers";
 import { getSupabaseAdminClient } from "../lib/supabaseAdmin";
+import reviewDecisionsRouter from "./review-decisions.routes";
+import videoCommentsRouter from "./video-comments.routes";
+import pictureLockRouter from "./picture-lock.routes";
 
 const router = Router();
 
@@ -579,5 +582,9 @@ router.patch("/tasks/:id", async (req: AuthenticatedRequest, res: Response) => {
     res.status(500).json({ error: "Failed to update task status" });
   }
 });
+
+router.use("/review-decisions", reviewDecisionsRouter);
+router.use("/picture-lock", pictureLockRouter);
+router.use("/video-comments", videoCommentsRouter);
 
 export default router;

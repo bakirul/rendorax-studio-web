@@ -447,7 +447,7 @@ export default function VaultSidebar({
         <button
           onClick={onCreateFolder}
           className="text-[#d4af37] transition-colors hover:text-white"
-          title="New Vault Folder"
+          title="New Project Assets Folder"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -477,7 +477,7 @@ export default function VaultSidebar({
             type="button"
             onClick={() => setClientVaultOpen((open) => !open)}
             className="shrink-0 p-0.5 text-gray-500 transition-colors hover:text-white"
-            aria-label="Toggle Client Vault"
+            aria-label="Toggle Project Assets"
           >
             <Chevron expanded={clientVaultOpen} />
           </button>
@@ -492,7 +492,7 @@ export default function VaultSidebar({
                 isClientVaultRoot ? "text-[#d4af37]" : "text-gray-300"
               }`}
             >
-              Client Vault
+              Project Assets
             </span>
           </button>
           <button
@@ -513,15 +513,15 @@ export default function VaultSidebar({
               <TreeChildren className="space-y-1">
                 <TreeSection
                   emoji="☁"
-                  title="Cloud Delivery"
-                  subtitle="CDN Assets"
+                  title="Review & Delivery"
+                  subtitle="Review versions and final delivery"
                   accentClass="text-[#d4af37]"
                   isExpanded={cloudSectionOpen}
                   onToggle={toggleCloudSection}
                 >
                   <LeafNode
                     emoji="☁️"
-                    label="All CDN Assets"
+                    label="All Review & Delivery"
                     isActive={activeBin === "cloud" && currentFolder === ""}
                     onClick={handleCloudRoot}
                     indentLevel={0}
@@ -534,7 +534,7 @@ export default function VaultSidebar({
                     onFolderClick={handleCloudFolder}
                     onDeleteFolder={onDeleteFolder}
                     showDelete={false}
-                    emptyLabel="No CDN folders yet"
+                    emptyLabel="No review folders yet"
                     baseDepth={1}
                     isTreeActive={activeBin === "cloud"}
                   />
@@ -542,15 +542,15 @@ export default function VaultSidebar({
 
                 <TreeSection
                   emoji="📦"
-                  title="Vault"
-                  subtitle="Local Storage"
+                  title="Asset Library"
+                  subtitle="Source and working assets"
                   accentClass="text-[#d4af37]"
                   isExpanded={vaultSectionOpen}
                   onToggle={toggleVaultSection}
                 >
                   <LeafNode
                     emoji="📂"
-                    label="All Local Assets"
+                    label="All Library Assets"
                     isActive={activeBin === "vault" && currentFolder === ""}
                     onClick={handleVaultRoot}
                     indentLevel={0}
@@ -563,7 +563,7 @@ export default function VaultSidebar({
                     onFolderClick={handleVaultFolder}
                     onDeleteFolder={onDeleteFolder}
                     showDelete={true}
-                    emptyLabel="No vault folders yet"
+                    emptyLabel="No library folders yet"
                     baseDepth={1}
                     isTreeActive={activeBin === "vault"}
                   />
