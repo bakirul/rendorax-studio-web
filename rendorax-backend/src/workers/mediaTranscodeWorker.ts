@@ -33,6 +33,12 @@ export function startMediaTranscodeWorker(
     console.log("[mediaTranscodeWorker] FFmpeg transcode worker ready (Phase 4)");
   });
 
+  worker.on("error", (error) => {
+    const message =
+      error instanceof Error ? error.message : "Unknown worker connection error";
+    console.error("[mediaTranscodeWorker] Redis/BullMQ error:", message);
+  });
+
   worker.on("completed", (job) => {
     const data = job.data as MediaTranscodeJobPayload;
     console.log("[mediaTranscodeWorker] Job completed:", {
