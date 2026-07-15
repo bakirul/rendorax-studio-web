@@ -42,7 +42,38 @@ export type MasterDeliveryEvent = {
 export type MasterDeliveryHistoryResponse = {
   current: MasterDeliveryEvent | null;
   history: MasterDeliveryEvent[];
+  downloadAccess?: MasterDeliveryDownloadAccessSummary;
 };
+
+export type MasterDeliveryDownloadAccessSummary = {
+  count: number;
+  firstGrantedAt: string | null;
+  lastGrantedAt: string | null;
+  hasAccessGrant: boolean;
+};
+
+export const EMPTY_MASTER_DELIVERY_DOWNLOAD_ACCESS: MasterDeliveryDownloadAccessSummary =
+  {
+    count: 0,
+    firstGrantedAt: null,
+    lastGrantedAt: null,
+    hasAccessGrant: false,
+  };
+
+export function normalizeMasterDeliveryDownloadAccess(
+  value: MasterDeliveryDownloadAccessSummary | null | undefined,
+): MasterDeliveryDownloadAccessSummary {
+  if (!value) return { ...EMPTY_MASTER_DELIVERY_DOWNLOAD_ACCESS };
+  const count = Math.max(0, Number(value.count) || 0);
+  return {
+    count,
+    firstGrantedAt:
+      typeof value.firstGrantedAt === "string" ? value.firstGrantedAt : null,
+    lastGrantedAt:
+      typeof value.lastGrantedAt === "string" ? value.lastGrantedAt : null,
+    hasAccessGrant: Boolean(value.hasAccessGrant) && count > 0,
+  };
+}
 
 export type CreateMasterDeliveryEventInput = {
   mediaAssetId: string;
@@ -267,7 +298,12 @@ export async function fetchMasterDelivery(
     throw new Error(message);
   }
 
-  return payload as MasterDeliveryHistoryResponse;
+  return {
+    ...(payload as MasterDeliveryHistoryResponse),
+    downloadAccess: normalizeMasterDeliveryDownloadAccess(
+      (payload as MasterDeliveryHistoryResponse)?.downloadAccess,
+    ),
+  };
 }
 
 export async function createMasterDeliveryEvent(

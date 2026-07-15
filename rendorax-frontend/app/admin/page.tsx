@@ -20,6 +20,8 @@ import ProjectWorkflowSummary from "@/components/admin/ProjectWorkflowSummary";
 import ProjectFeedbackSummary from "@/components/admin/ProjectFeedbackSummary";
 import AdminAssetGallery from "@/components/admin/AdminAssetGallery";
 import AdminReviewViewer from "@/components/admin/AdminReviewViewer";
+import OperationsQueue from "@/components/admin/OperationsQueue";
+import type { OperationsQueueItem } from "@/utils/operationsQueue";
 import GalleryViewModeToggle from "@/components/dashboard/GalleryViewModeToggle";
 import type { GalleryViewMode } from "@/hooks/useGalleryViewStyles";
 import { Eye, EyeOff } from "lucide-react";
@@ -250,6 +252,8 @@ export default function AdminPortal() {
     "Color Grading",
     "Audio & Master",
     "Ready for Review",
+    "Ready for Final Delivery",
+    "Delivered",
   ];
 
   const [previewFile, setPreviewFile] = useState<{
@@ -309,6 +313,9 @@ export default function AdminPortal() {
   const [projectOpenFeedbackCounts, setProjectOpenFeedbackCounts] = useState<
     Record<string, number>
   >({});
+  const [highlightedProjectId, setHighlightedProjectId] = useState<string | null>(
+    null,
+  );
   const [newTask, setNewTask] = useState({
     title: "",
     description: "",
@@ -580,6 +587,31 @@ export default function AdminPortal() {
     setClientInvoices(invoiceData || []);
 
     setFilesLoading(false);
+  };
+
+  const handleQueueNavigate = async (item: OperationsQueueItem) => {
+    if (item.clientId) {
+      await fetchClientData(item.clientId);
+    } else {
+      setSelectedClient(null);
+      setClientAssets([]);
+      setPreviewFile(null);
+      setClientBrief(null);
+    }
+
+    setHighlightedProjectId(item.projectId);
+
+    window.setTimeout(() => {
+      document
+        .getElementById(`admin-project-${item.projectId}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 120);
+
+    window.setTimeout(() => {
+      setHighlightedProjectId((current) =>
+        current === item.projectId ? null : current,
+      );
+    }, 2800);
   };
 
   const updateStatus = async (newStatus: string) => {
@@ -1381,8 +1413,18 @@ export default function AdminPortal() {
           {/* ── Main Content ── */}
           <div className="lg:col-span-3 flex flex-col gap-8">
 
+            <OperationsQueue
+              projects={projects}
+              tasks={tasks}
+              projectsLoading={projectsLoading}
+              tasksLoading={tasksLoading}
+              onNavigate={(item) => {
+                void handleQueueNavigate(item);
+              }}
+            />
+
             {/* ═══════ SECTION: Projects ═══════ */}
-            <section>
+            <section id="admin-projects-section">
               <div className="bg-bg-panel border border-white/5 p-6">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 border-b border-white/10 pb-3 gap-4">
                   <h3 className="text-sm uppercase tracking-widest text-gold-primary">
@@ -1494,7 +1536,12 @@ export default function AdminPortal() {
                       return (
                         <div
                           key={proj.id}
-                          className="border border-white/5 bg-bg-body hover:border-gold-primary/20 transition-all overflow-hidden"
+                          id={`admin-project-${proj.id}`}
+                          className={`border bg-bg-body hover:border-gold-primary/20 transition-all overflow-hidden ${
+                            highlightedProjectId === proj.id
+                              ? "border-gold-primary/50 ring-1 ring-gold-primary/40"
+                              : "border-white/5"
+                          }`}
                         >
                           <div className="flex flex-col sm:flex-row justify-between items-start gap-3 p-4 pb-3">
                             <div className="min-w-0 flex-1">

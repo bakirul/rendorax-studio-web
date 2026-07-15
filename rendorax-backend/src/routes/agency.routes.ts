@@ -287,6 +287,8 @@ const ALLOWED_PROJECT_STATUSES = new Set([
   "Color Grading",
   "Audio & Master",
   "Ready for Review",
+  "Ready for Final Delivery",
+  "Delivered",
 ]);
 
 const projectResponseInclude = {
@@ -317,7 +319,7 @@ router.patch("/projects/:id", async (req: AuthenticatedRequest, res: Response) =
   if (!ALLOWED_PROJECT_STATUSES.has(nextStatus)) {
     res.status(400).json({
       error:
-        "status must be one of: Awaiting Assets, Ingesting, Offline Edit, Color Grading, Audio & Master, Ready for Review",
+        "status must be one of: Awaiting Assets, Ingesting, Offline Edit, Color Grading, Audio & Master, Ready for Review, Ready for Final Delivery, Delivered",
     });
     return;
   }

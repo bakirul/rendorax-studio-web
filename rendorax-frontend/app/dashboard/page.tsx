@@ -212,6 +212,8 @@ const PIPELINE_STATUSES = [
   "Color Grading",
   "Audio & Master",
   "Ready for Review",
+  "Ready for Final Delivery",
+  "Delivered",
 ] as const;
 
 function normalizePipelineStatus(status: string | undefined): string {

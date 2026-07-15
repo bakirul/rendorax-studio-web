@@ -7,12 +7,15 @@ import {
   formatMasterDeliveryTimestamp,
   getMasterDeliveryStatusLabel,
   hasActiveMasterDelivery,
+  type MasterDeliveryDownloadAccessSummary,
   type MasterDeliveryEvent,
+  EMPTY_MASTER_DELIVERY_DOWNLOAD_ACCESS,
 } from "@/utils/masterDelivery";
 
 interface ProjectDeliverySummaryProps {
   current: MasterDeliveryEvent | null;
   historyCount: number;
+  downloadAccess?: MasterDeliveryDownloadAccessSummary | null;
   /** Full MediaAsset for the current delivery (from project assets). */
   currentAsset?: MediaAssetRecord | null;
   loading?: boolean;
@@ -20,9 +23,19 @@ interface ProjectDeliverySummaryProps {
   onPreviewCurrent?: (asset: MediaAssetRecord) => void;
 }
 
+function formatAccessGrantedDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 export default function ProjectDeliverySummary({
   current,
   historyCount,
+  downloadAccess = EMPTY_MASTER_DELIVERY_DOWNLOAD_ACCESS,
   currentAsset = null,
   loading = false,
   error = null,
@@ -40,6 +53,7 @@ export default function ProjectDeliverySummary({
     null;
 
   const canPreview = Boolean(currentAsset && onPreviewCurrent);
+  const access = downloadAccess ?? EMPTY_MASTER_DELIVERY_DOWNLOAD_ACCESS;
 
   const openPreview = () => {
     if (!currentAsset || !onPreviewCurrent) return;
@@ -139,6 +153,36 @@ export default function ProjectDeliverySummary({
               {historyCount} deliver{historyCount === 1 ? "y" : "ies"}
             </span>
           </p>
+
+          <div className="min-w-0 pt-0.5">
+            <p className="text-[10px] uppercase tracking-widest text-text-gray mb-1">
+              Download Access
+            </p>
+            {access.hasAccessGrant ? (
+              <div className="space-y-0.5 text-[11px] text-text-gray">
+                <p>
+                  First granted:{" "}
+                  <span className="text-text-white">
+                    {formatAccessGrantedDate(access.firstGrantedAt)}
+                  </span>
+                </p>
+                <p>
+                  Last granted:{" "}
+                  <span className="text-text-white">
+                    {formatAccessGrantedDate(access.lastGrantedAt)}
+                  </span>
+                </p>
+                <p>
+                  Access count:{" "}
+                  <span className="text-text-white tabular-nums">
+                    {access.count}
+                  </span>
+                </p>
+              </div>
+            ) : (
+              <p className="text-[11px] text-text-gray/80">Never granted</p>
+            )}
+          </div>
         </div>
       )}
     </div>

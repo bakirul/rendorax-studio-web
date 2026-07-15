@@ -75,6 +75,7 @@ model MediaAsset {
   pictureLockEvents      PictureLockEvent[]
   masterDeliveryEvents   MasterDeliveryEvent[] @relation("MasterDeliveryAsset")
   masterDeliverySources  MasterDeliveryEvent[] @relation("MasterDeliverySourceReview")
+  masterDeliveryDownloadEvents MasterDeliveryDownloadEvent[]
   agencyProject          AgencyProject?       @relation(fields: [agencyProjectId], references: [id], onDelete: SetNull)
 
   @@index([userId])
@@ -163,6 +164,12 @@ enum MasterDeliveryEventType {
   @@schema("public")
 }
 
+enum MasterDeliveryDownloadEventType {
+  access_granted
+
+  @@schema("public")
+}
+
 /// Studio team member — `id` matches Supabase `auth.users.id`.
 model User {
   id             String          @id
@@ -177,6 +184,7 @@ model User {
   reviewVersionDecisions ReviewVersionDecision[]
   pictureLockEvents      PictureLockEvent[]
   masterDeliveryEvents   MasterDeliveryEvent[]
+  masterDeliveryDownloadEvents MasterDeliveryDownloadEvent[]
 
   @@schema("public")
 }
@@ -201,6 +209,7 @@ model AgencyProject {
   reviewVersionDecisions ReviewVersionDecision[]
   pictureLockEvents      PictureLockEvent[]
   masterDeliveryEvents   MasterDeliveryEvent[]
+  masterDeliveryDownloadEvents MasterDeliveryDownloadEvent[]
 
   @@index([ownerId])
   @@index([clientId])
@@ -280,9 +289,33 @@ model MasterDeliveryEvent {
   agencyProject     AgencyProject @relation(fields: [agencyProjectId], references: [id], onDelete: Cascade)
   actor             User          @relation(fields: [actorId], references: [id], onDelete: Restrict)
   sourceReviewAsset MediaAsset?   @relation("MasterDeliverySourceReview", fields: [sourceReviewAssetId], references: [id], onDelete: SetNull)
+  downloadEvents    MasterDeliveryDownloadEvent[]
 
   @@index([mediaAssetId, createdAt])
   @@index([agencyProjectId, createdAt])
   @@index([sourceReviewAssetId])
+  @@schema("public")
+}
+
+/// Append-only audit: signed Master Delivery download URL issued (not download completion).
+model MasterDeliveryDownloadEvent {
+  id                    String                          @id @default(uuid())
+  masterDeliveryEventId String
+  mediaAssetId          String
+  agencyProjectId       String
+  actorId               String
+  actorRole             AgencyRole
+  eventType             MasterDeliveryDownloadEventType @default(access_granted)
+  createdAt             DateTime                        @default(now())
+
+  masterDeliveryEvent MasterDeliveryEvent @relation(fields: [masterDeliveryEventId], references: [id], onDelete: Cascade)
+  mediaAsset    MediaAsset    @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+  agencyProject AgencyProject @relation(fields: [agencyProjectId], references: [id], onDelete: Cascade)
+  actor         User          @relation(fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([masterDeliveryEventId, createdAt])
+  @@index([mediaAssetId, createdAt])
+  @@index([agencyProjectId, createdAt])
+  @@index([actorId, createdAt])
   @@schema("public")
 }

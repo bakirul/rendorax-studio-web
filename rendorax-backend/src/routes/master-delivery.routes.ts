@@ -370,6 +370,24 @@ router.get("/download", async (req: AuthenticatedRequest, res: Response) => {
       asset.fileName,
     );
 
+    try {
+      await prisma.masterDeliveryDownloadEvent.create({
+        data: {
+          masterDeliveryEventId: latest.id,
+          mediaAssetId: asset.id,
+          agencyProjectId: access.projectId,
+          actorId: actor.id,
+          actorRole: actor.role,
+          eventType: "access_granted",
+        },
+      });
+    } catch (auditError) {
+      console.error(
+        "Failed to record master delivery download access grant:",
+        auditError,
+      );
+    }
+
     res.json({
       downloadUrl,
       fileName: asset.fileName,
@@ -382,6 +400,46 @@ router.get("/download", async (req: AuthenticatedRequest, res: Response) => {
     res.status(500).json({ error: "Failed to create master delivery download" });
   }
 });
+
+function emptyDownloadAccess() {
+  return {
+    count: 0,
+    firstGrantedAt: null as string | null,
+    lastGrantedAt: null as string | null,
+    hasAccessGrant: false,
+  };
+}
+
+async function buildDownloadAccessSummary(
+  prisma: PrismaClient,
+  masterDeliveryEventId: string | null | undefined,
+) {
+  if (!masterDeliveryEventId) {
+    return emptyDownloadAccess();
+  }
+
+  const agg = await prisma.masterDeliveryDownloadEvent.aggregate({
+    where: {
+      masterDeliveryEventId,
+      eventType: "access_granted",
+    },
+    _count: { _all: true },
+    _min: { createdAt: true },
+    _max: { createdAt: true },
+  });
+
+  const count = agg._count._all;
+  if (count === 0) {
+    return emptyDownloadAccess();
+  }
+
+  return {
+    count,
+    firstGrantedAt: agg._min.createdAt?.toISOString() ?? null,
+    lastGrantedAt: agg._max.createdAt?.toISOString() ?? null,
+    hasAccessGrant: true,
+  };
+}
 
 /**
  * GET /api/agency/master-delivery?agencyProjectId=
@@ -413,10 +471,15 @@ router.get("/", async (req: AuthenticatedRequest, res: Response) => {
     });
 
     const current = history[0] ? serializeEvent(history[0]) : null;
+    const downloadAccess = await buildDownloadAccessSummary(
+      prisma,
+      history[0]?.id,
+    );
 
     res.json({
       current,
       history: history.map(serializeEvent),
+      downloadAccess,
     });
   } catch (error) {
     console.error("Failed to fetch master delivery events:", error);

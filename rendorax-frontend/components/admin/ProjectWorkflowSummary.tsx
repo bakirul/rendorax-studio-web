@@ -15,7 +15,10 @@ import {
 } from "@/utils/pictureLock";
 import {
   fetchMasterDelivery,
+  normalizeMasterDeliveryDownloadAccess,
+  type MasterDeliveryDownloadAccessSummary,
   type MasterDeliveryEvent,
+  EMPTY_MASTER_DELIVERY_DOWNLOAD_ACCESS,
 } from "@/utils/masterDelivery";
 import {
   countProjectWorkflowAssets,
@@ -74,6 +77,7 @@ type SummaryState = {
   latestDecisionByAssetId: Record<string, ReviewDecision | null>;
   deliveryCurrent: MasterDeliveryEvent | null;
   deliveryHistory: MasterDeliveryEvent[];
+  deliveryDownloadAccess: MasterDeliveryDownloadAccessSummary;
   deliveryError: string | null;
 };
 
@@ -94,6 +98,7 @@ const EMPTY_SUMMARY: SummaryState = {
   latestDecisionByAssetId: {},
   deliveryCurrent: null,
   deliveryHistory: [],
+  deliveryDownloadAccess: EMPTY_MASTER_DELIVERY_DOWNLOAD_ACCESS,
   deliveryError: null,
 };
 
@@ -172,11 +177,15 @@ export default function ProjectWorkflowSummary({
               .then((payload) => ({
                 current: payload.current ?? null,
                 history: payload.history ?? [],
+                downloadAccess: normalizeMasterDeliveryDownloadAccess(
+                  payload.downloadAccess,
+                ),
                 error: null as string | null,
               }))
               .catch((deliveryError: unknown) => ({
                 current: null as MasterDeliveryEvent | null,
                 history: [] as MasterDeliveryEvent[],
+                downloadAccess: EMPTY_MASTER_DELIVERY_DOWNLOAD_ACCESS,
                 error:
                   deliveryError instanceof Error
                     ? deliveryError.message
@@ -200,6 +209,7 @@ export default function ProjectWorkflowSummary({
 
         const deliveryHistory = deliveryResult.history;
         const deliveryCurrent = deliveryResult.current;
+        const deliveryDownloadAccess = deliveryResult.downloadAccess;
 
         const latestDecisionByAssetId: Record<string, ReviewDecision | null> =
           {};
@@ -288,6 +298,7 @@ export default function ProjectWorkflowSummary({
           latestDecisionByAssetId,
           deliveryCurrent,
           deliveryHistory,
+          deliveryDownloadAccess,
           deliveryError: deliveryResult.error,
         });
       } catch (loadError) {
@@ -417,6 +428,7 @@ export default function ProjectWorkflowSummary({
       <ProjectDeliverySummary
         current={summary.deliveryCurrent}
         historyCount={summary.deliveryHistory.length}
+        downloadAccess={summary.deliveryDownloadAccess}
         currentAsset={currentDeliveryAsset}
         loading={loading}
         error={summary.deliveryError}
