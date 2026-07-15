@@ -7,6 +7,7 @@ export type ProjectWorkflowCounts = {
   clientMaterials: number;
   workingFiles: number;
   reviewVersions: number;
+  masterDeliveries: number;
 };
 
 export type ProjectWorkflowReviewStatusLabel =
@@ -48,6 +49,12 @@ export function isProjectReviewVersionFolder(
   return folderMatchesPrefix(folder, PROJECT_ASSET_FOLDER.REVIEW);
 }
 
+export function isProjectMasterDeliveryFolder(
+  folder: string | null | undefined,
+): boolean {
+  return folderMatchesPrefix(folder, PROJECT_ASSET_FOLDER.MASTER_DELIVERY);
+}
+
 export function countProjectWorkflowAssets(
   assets: MediaAssetRecord[],
   projectClientId: string | null | undefined,
@@ -55,10 +62,16 @@ export function countProjectWorkflowAssets(
   let clientMaterials = 0;
   let workingFiles = 0;
   let reviewVersions = 0;
+  let masterDeliveries = 0;
 
   for (const asset of assets) {
     if (isProjectReviewVersionFolder(asset.folder)) {
       reviewVersions += 1;
+      continue;
+    }
+
+    if (isProjectMasterDeliveryFolder(asset.folder)) {
+      masterDeliveries += 1;
       continue;
     }
 
@@ -73,7 +86,7 @@ export function countProjectWorkflowAssets(
     }
   }
 
-  return { clientMaterials, workingFiles, reviewVersions };
+  return { clientMaterials, workingFiles, reviewVersions, masterDeliveries };
 }
 
 export function getProjectReviewStatusLabel(

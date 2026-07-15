@@ -43,6 +43,8 @@ export default function DashboardHeader({
   uploadSession,
   onToggleScreenShare,
   onR2UploadSuccess,
+  activeProjectId,
+  onOpenMasterDeliveryUpload,
 }: {
   handleUpload: (files: FileList | null) => Promise<void>;
   uploading: boolean;
@@ -52,6 +54,8 @@ export default function DashboardHeader({
     result: R2UploadResult,
     file: File,
   ) => void | Promise<MediaAssetRecord | void>;
+  activeProjectId?: string;
+  onOpenMasterDeliveryUpload?: () => void;
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -63,6 +67,10 @@ export default function DashboardHeader({
   const [isAppearanceOpen, setIsAppearanceOpen] = useState(false);
   const [isR2ModalOpen, setIsR2ModalOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const canUploadMasterDelivery = Boolean(
+    isEditor && activeProjectId?.trim() && onOpenMasterDeliveryUpload,
+  );
 
   React.useEffect(() => {
     setHasHydrated(true);
@@ -239,6 +247,52 @@ export default function DashboardHeader({
               <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
             </svg>
           </button>
+
+          {isEditor && onOpenMasterDeliveryUpload ? (
+            <>
+              <button
+                type="button"
+                disabled={!canUploadMasterDelivery}
+                onClick={onOpenMasterDeliveryUpload}
+                title={
+                  canUploadMasterDelivery
+                    ? "Upload Master Delivery"
+                    : "Select an active project to upload Master Delivery"
+                }
+                className="hidden sm:flex text-[11px] uppercase tracking-[0.2em] border border-emerald-500/35 bg-[#1c1c24] hover:bg-emerald-500/10 text-emerald-300/90 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#1c1c24] px-4 py-2.5 font-bold rounded-md transition-all items-center gap-2"
+              >
+                Upload Master Delivery
+              </button>
+              <button
+                type="button"
+                disabled={!canUploadMasterDelivery}
+                onClick={onOpenMasterDeliveryUpload}
+                aria-label="Upload Master Delivery"
+                title={
+                  canUploadMasterDelivery
+                    ? "Upload Master Delivery"
+                    : "Select an active project to upload Master Delivery"
+                }
+                className="sm:hidden flex items-center justify-center border border-emerald-500/35 bg-[#1c1c24] text-emerald-300/90 disabled:opacity-40 disabled:cursor-not-allowed p-2 rounded-md"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+              </button>
+            </>
+          ) : null}
 
           <button
             onClick={() => inputRef.current?.click()}

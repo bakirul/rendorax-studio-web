@@ -26,6 +26,11 @@ export function getMediaFileCategory(fileNameOrUrl: string): MediaFileCategory {
   return "unknown";
 }
 
+/** Whether the dashboard player pipeline can preview this file type. */
+export function isMediaFilePreviewable(fileNameOrUrl: string): boolean {
+  return getMediaFileCategory(fileNameOrUrl) !== "unknown";
+}
+
 /** Resolves iframe `src` for document previews, or null when unsupported. */
 export function getDocumentPreviewSrc(
   playbackUrl: string,

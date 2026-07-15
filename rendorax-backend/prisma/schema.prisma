@@ -73,6 +73,8 @@ model MediaAsset {
   processingJobs         MediaProcessingJob[]
   reviewVersionDecisions ReviewVersionDecision[]
   pictureLockEvents      PictureLockEvent[]
+  masterDeliveryEvents   MasterDeliveryEvent[] @relation("MasterDeliveryAsset")
+  masterDeliverySources  MasterDeliveryEvent[] @relation("MasterDeliverySourceReview")
   agencyProject          AgencyProject?       @relation(fields: [agencyProjectId], references: [id], onDelete: SetNull)
 
   @@index([userId])
@@ -152,6 +154,15 @@ enum PictureLockEventType {
   @@schema("public")
 }
 
+enum MasterDeliveryEventType {
+  delivered
+  replaced
+  restored
+  expired
+
+  @@schema("public")
+}
+
 /// Studio team member — `id` matches Supabase `auth.users.id`.
 model User {
   id             String          @id
@@ -165,6 +176,7 @@ model User {
   clientProjects         AgencyProject[]         @relation("ProjectClient")
   reviewVersionDecisions ReviewVersionDecision[]
   pictureLockEvents      PictureLockEvent[]
+  masterDeliveryEvents   MasterDeliveryEvent[]
 
   @@schema("public")
 }
@@ -188,6 +200,7 @@ model AgencyProject {
   assets                 MediaAsset[]
   reviewVersionDecisions ReviewVersionDecision[]
   pictureLockEvents      PictureLockEvent[]
+  masterDeliveryEvents   MasterDeliveryEvent[]
 
   @@index([ownerId])
   @@index([clientId])
@@ -249,5 +262,27 @@ model PictureLockEvent {
 
   @@index([mediaAssetId, createdAt])
   @@index([agencyProjectId, createdAt])
+  @@schema("public")
+}
+
+model MasterDeliveryEvent {
+  id                  String                  @id @default(uuid())
+  mediaAssetId        String
+  agencyProjectId     String
+  actorId             String
+  actorRole           AgencyRole
+  eventType           MasterDeliveryEventType
+  sourceReviewAssetId String?
+  note                String?
+  createdAt           DateTime                @default(now())
+
+  mediaAsset        MediaAsset    @relation("MasterDeliveryAsset", fields: [mediaAssetId], references: [id], onDelete: Cascade)
+  agencyProject     AgencyProject @relation(fields: [agencyProjectId], references: [id], onDelete: Cascade)
+  actor             User          @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  sourceReviewAsset MediaAsset?   @relation("MasterDeliverySourceReview", fields: [sourceReviewAssetId], references: [id], onDelete: SetNull)
+
+  @@index([mediaAssetId, createdAt])
+  @@index([agencyProjectId, createdAt])
+  @@index([sourceReviewAssetId])
   @@schema("public")
 }

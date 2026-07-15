@@ -32,3 +32,43 @@ export function isReviewVersionAsset(
     folder.startsWith(`${PROJECT_ASSET_FOLDER.REVIEW}/`)
   );
 }
+
+/** Project-linked asset in the reserved Master Delivery folder. */
+export function isMasterDeliveryAsset(
+  asset: ReviewClassifiableAsset | null | undefined,
+): boolean {
+  if (!asset?.agencyProjectId) return false;
+
+  const folder = asset.folder?.trim();
+  if (!folder) return false;
+
+  return (
+    folder === PROJECT_ASSET_FOLDER.MASTER_DELIVERY ||
+    folder.startsWith(`${PROJECT_ASSET_FOLDER.MASTER_DELIVERY}/`)
+  );
+}
+
+function folderMatchesPrefix(
+  folder: string | null | undefined,
+  prefix: string,
+): boolean {
+  const value = folder?.trim().replace(/\/+$/, "");
+  if (!value) return false;
+  return value === prefix || value.startsWith(`${prefix}/`);
+}
+
+/**
+ * Map a cloud folder path to a project asset class chip.
+ * Used so sidebar folder selection stays in sync with gallery filters.
+ */
+export function resolveProjectAssetClassFromFolder(
+  folder: string | null | undefined,
+): "review_versions" | "master_delivery" | null {
+  if (folderMatchesPrefix(folder, PROJECT_ASSET_FOLDER.MASTER_DELIVERY)) {
+    return "master_delivery";
+  }
+  if (folderMatchesPrefix(folder, PROJECT_ASSET_FOLDER.REVIEW)) {
+    return "review_versions";
+  }
+  return null;
+}

@@ -10,6 +10,7 @@ import { getSupabaseAdminClient } from "../lib/supabaseAdmin";
 import reviewDecisionsRouter from "./review-decisions.routes";
 import videoCommentsRouter from "./video-comments.routes";
 import pictureLockRouter from "./picture-lock.routes";
+import masterDeliveryRouter from "./master-delivery.routes";
 
 const router = Router();
 
@@ -586,5 +587,6 @@ router.patch("/tasks/:id", async (req: AuthenticatedRequest, res: Response) => {
 router.use("/review-decisions", reviewDecisionsRouter);
 router.use("/picture-lock", pictureLockRouter);
 router.use("/video-comments", videoCommentsRouter);
+router.use("/master-delivery", masterDeliveryRouter);
 
 export default router;

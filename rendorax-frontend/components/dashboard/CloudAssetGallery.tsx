@@ -24,6 +24,8 @@ interface CloudAssetGalleryProps {
   loading?: boolean;
   searchQuery?: string;
   isEditor?: boolean;
+  emptyTitle?: string;
+  emptyHint?: string;
   onPreviewAsset?: (asset: MediaAssetRecord) => void;
   onDeleteAsset?: (asset: MediaAssetRecord) => void;
   onRenameAsset?: (asset: MediaAssetRecord) => void;
@@ -65,6 +67,8 @@ export default function CloudAssetGallery({
   loading = false,
   searchQuery = "",
   isEditor = false,
+  emptyTitle = "No review versions are available here yet.",
+  emptyHint,
   onPreviewAsset,
   onDeleteAsset,
   onRenameAsset,
@@ -242,11 +246,11 @@ export default function CloudAssetGallery({
           </svg>
         </div>
         <p className="text-sm font-medium text-gray-300">
-          No review versions are available here yet.
+          {emptyTitle}
         </p>
         <p className="mt-1 text-xs text-gray-500">
-          Upload Review Version saves project-linked cuts to{" "}
-          {PROJECT_ASSET_FOLDER.REVIEW}.
+          {emptyHint ??
+            `Upload Review Version saves project-linked cuts to ${PROJECT_ASSET_FOLDER.REVIEW}.`}
         </p>
       </div>
     );

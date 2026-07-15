@@ -14,6 +14,10 @@ import {
   type PictureLockEvent,
 } from "@/utils/pictureLock";
 import {
+  fetchMasterDelivery,
+  type MasterDeliveryEvent,
+} from "@/utils/masterDelivery";
+import {
   countProjectWorkflowAssets,
   formatWorkflowActivityDate,
   getProjectPictureLockLabel,
@@ -26,6 +30,7 @@ import {
   type ProjectWorkflowReviewStatusLabel,
 } from "@/utils/projectWorkflowSummary";
 import {
+  buildMasterDeliveryActivityEvents,
   buildPictureLockActivityEvents,
   buildReviewDecisionActivityEvents,
   buildUploadActivityEvents,
@@ -39,6 +44,7 @@ import {
   type OperationalTaskLike,
 } from "@/utils/projectOperationalStatus";
 import ProjectOperationalStatus from "@/components/admin/ProjectOperationalStatus";
+import ProjectDeliverySummary from "@/components/admin/ProjectDeliverySummary";
 
 type AgencyUserLookup = {
   id: string;
@@ -52,6 +58,8 @@ interface ProjectWorkflowSummaryProps {
   agencyUsers: AgencyUserLookup[];
   tasks?: OperationalTaskLike[];
   openFeedbackCount?: number;
+  /** Opens existing Admin HQ media preview for the current Master Delivery asset. */
+  onPreviewAsset?: (asset: MediaAssetRecord) => void;
   /** Rendered between the status strip and Recent Activity (e.g. Feedback). */
   children?: ReactNode;
 }
@@ -64,12 +72,16 @@ type SummaryState = {
   recentActivity: ProjectActivityEvent[];
   assets: MediaAssetRecord[];
   latestDecisionByAssetId: Record<string, ReviewDecision | null>;
+  deliveryCurrent: MasterDeliveryEvent | null;
+  deliveryHistory: MasterDeliveryEvent[];
+  deliveryError: string | null;
 };
 
 const EMPTY_COUNTS: ProjectWorkflowCounts = {
   clientMaterials: 0,
   workingFiles: 0,
   reviewVersions: 0,
+  masterDeliveries: 0,
 };
 
 const EMPTY_SUMMARY: SummaryState = {
@@ -80,6 +92,9 @@ const EMPTY_SUMMARY: SummaryState = {
   recentActivity: [],
   assets: [],
   latestDecisionByAssetId: {},
+  deliveryCurrent: null,
+  deliveryHistory: [],
+  deliveryError: null,
 };
 
 const RECENT_ACTIVITY_LIMIT = 8;
@@ -103,6 +118,7 @@ export default function ProjectWorkflowSummary({
   agencyUsers,
   tasks = [],
   openFeedbackCount = 0,
+  onPreviewAsset,
   children,
 }: ProjectWorkflowSummaryProps) {
   const [loading, setLoading] = useState(true);
@@ -132,26 +148,41 @@ export default function ProjectWorkflowSummary({
           assets.map((asset) => [asset.id, asset] as const),
         );
 
-        const [decisionResults, lockResults] = await Promise.all([
-          Promise.all(
-            reviewAssets.map(async (asset) => {
-              try {
-                return await fetchReviewDecisions(asset.id);
-              } catch {
-                return null;
-              }
-            }),
-          ),
-          Promise.all(
-            reviewAssets.map(async (asset) => {
-              try {
-                return await fetchPictureLock(asset.id);
-              } catch {
-                return null;
-              }
-            }),
-          ),
-        ]);
+        const [decisionResults, lockResults, deliveryResult] =
+          await Promise.all([
+            Promise.all(
+              reviewAssets.map(async (asset) => {
+                try {
+                  return await fetchReviewDecisions(asset.id);
+                } catch {
+                  return null;
+                }
+              }),
+            ),
+            Promise.all(
+              reviewAssets.map(async (asset) => {
+                try {
+                  return await fetchPictureLock(asset.id);
+                } catch {
+                  return null;
+                }
+              }),
+            ),
+            fetchMasterDelivery(projectId)
+              .then((payload) => ({
+                current: payload.current ?? null,
+                history: payload.history ?? [],
+                error: null as string | null,
+              }))
+              .catch((deliveryError: unknown) => ({
+                current: null as MasterDeliveryEvent | null,
+                history: [] as MasterDeliveryEvent[],
+                error:
+                  deliveryError instanceof Error
+                    ? deliveryError.message
+                    : "Failed to load master delivery",
+              })),
+          ]);
 
         if (cancelled || generation !== loadGenerationRef.current) return;
 
@@ -166,6 +197,9 @@ export default function ProjectWorkflowSummary({
           if (!result?.history?.length) continue;
           allLockEvents.push(...result.history);
         }
+
+        const deliveryHistory = deliveryResult.history;
+        const deliveryCurrent = deliveryResult.current;
 
         const latestDecisionByAssetId: Record<string, ReviewDecision | null> =
           {};
@@ -222,10 +256,16 @@ export default function ProjectWorkflowSummary({
           actorLabel: resolveWorkflowActorLabel(event.actor),
         }));
 
+        const deliveryActivities = deliveryHistory.map((event) => ({
+          at: event.createdAt,
+          actorLabel: resolveWorkflowActorLabel(event.actor),
+        }));
+
         const lastActivity = pickLatestWorkflowActivity([
           ...assetActivities,
           ...decisionActivities,
           ...lockActivities,
+          ...deliveryActivities,
         ]);
 
         const recentActivity = mergeProjectActivityEvents(
@@ -233,6 +273,7 @@ export default function ProjectWorkflowSummary({
             buildUploadActivityEvents(assets, clientId, agencyUsers),
             buildReviewDecisionActivityEvents(allDecisions, assetsById),
             buildPictureLockActivityEvents(allLockEvents, assetsById),
+            buildMasterDeliveryActivityEvents(deliveryHistory),
           ],
           RECENT_ACTIVITY_LIMIT,
         );
@@ -245,6 +286,9 @@ export default function ProjectWorkflowSummary({
           recentActivity,
           assets,
           latestDecisionByAssetId,
+          deliveryCurrent,
+          deliveryHistory,
+          deliveryError: deliveryResult.error,
         });
       } catch (loadError) {
         if (cancelled || generation !== loadGenerationRef.current) return;
@@ -283,10 +327,17 @@ export default function ProjectWorkflowSummary({
       assets: summary.assets,
       latestDecisionByAssetId,
       openFeedbackCount,
+      masterDeliveryCurrent: summary.deliveryCurrent,
     });
   })();
 
   const assignment = resolveAssignedTeamSummary(tasks);
+
+  const currentDeliveryAsset = summary.deliveryCurrent?.mediaAssetId
+    ? summary.assets.find(
+        (asset) => asset.id === summary.deliveryCurrent?.mediaAssetId,
+      ) ?? null
+    : null;
 
   const visibleActivity = activityExpanded
     ? summary.recentActivity
@@ -332,6 +383,15 @@ export default function ProjectWorkflowSummary({
                   {summary.counts.reviewVersions}
                 </span>
               </span>
+              <span className="text-white/15 hidden sm:inline" aria-hidden>
+                ·
+              </span>
+              <span>
+                Master Deliveries{" "}
+                <span className="tabular-nums text-text-white font-medium">
+                  {summary.counts.masterDeliveries}
+                </span>
+              </span>
             </div>
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-text-gray">
               <span>
@@ -353,6 +413,15 @@ export default function ProjectWorkflowSummary({
           </div>
         )}
       </div>
+
+      <ProjectDeliverySummary
+        current={summary.deliveryCurrent}
+        historyCount={summary.deliveryHistory.length}
+        currentAsset={currentDeliveryAsset}
+        loading={loading}
+        error={summary.deliveryError}
+        onPreviewCurrent={onPreviewAsset}
+      />
 
       {children}
 

@@ -2,8 +2,6 @@
 
 import { useEffect, useState, useRef, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
-import StreamingVideoPlayer from "@/components/dashboard/StreamingVideoPlayer";
-import MediaPreviewPanel from "@/components/dashboard/MediaPreviewPanel";
 import {
   fetchMediaAssets,
   fetchMediaClients,
@@ -11,17 +9,19 @@ import {
   getMediaOriginalUrl,
   getMediaPlaybackUrl,
   isMediaAssetProcessing,
-  sanitizeAbsoluteMediaUrl,
   updateMediaAsset,
   type MediaAssetRecord,
   type MediaClientRecord,
 } from "@/utils/mediaAssets";
-import { buildPreviewPlayerKey } from "@/utils/previewAssetKey";
 import { getMediaFileCategory } from "@/utils/mediaFileCategory";
 import GlobalLiveWidget from "@/components/GlobalLiveWidget";
 import ChatbotWidget from "@/components/ChatbotWidget";
 import ProjectWorkflowSummary from "@/components/admin/ProjectWorkflowSummary";
 import ProjectFeedbackSummary from "@/components/admin/ProjectFeedbackSummary";
+import AdminAssetGallery from "@/components/admin/AdminAssetGallery";
+import AdminReviewViewer from "@/components/admin/AdminReviewViewer";
+import GalleryViewModeToggle from "@/components/dashboard/GalleryViewModeToggle";
+import type { GalleryViewMode } from "@/hooks/useGalleryViewStyles";
 import { Eye, EyeOff } from "lucide-react";
 
 const CLIENT_DISCOVERY_TIMEOUT_MS = 10_000;
@@ -260,8 +260,6 @@ export default function AdminPortal() {
     assetId?: string;
     agencyProjectId?: string | null;
   } | null>(null);
-  const [clientComments, setClientComments] = useState<any[]>([]);
-  const videoRef = useRef<HTMLVideoElement>(null);
   const [clientBrief, setClientBrief] = useState<any>(null);
 
   // --- NEW: Invoice & Billing States ---
@@ -305,6 +303,9 @@ export default function AdminPortal() {
   const [expandedProjectAssets, setExpandedProjectAssets] = useState<
     Record<string, boolean>
   >({});
+  /** Admin-local media collection layout — decoupled from Dashboard Appearance. */
+  const [adminAssetViewMode, setAdminAssetViewMode] =
+    useState<GalleryViewMode>("list");
   const [projectOpenFeedbackCounts, setProjectOpenFeedbackCounts] = useState<
     Record<string, number>
   >({});
@@ -522,6 +523,7 @@ export default function AdminPortal() {
   const fetchClientData = async (clientId: string) => {
     setFilesLoading(true);
     setSelectedClient(clientId);
+    setPreviewFile(null);
     setClientBrief(null);
     setShowInvoiceForm(false);
     setPhaseUpdateError(null);
@@ -678,55 +680,13 @@ export default function AdminPortal() {
         assetId: asset.id,
         agencyProjectId: asset.agencyProjectId ?? null,
       });
-      if (isVideo && selectedClient) {
-        const byAsset = asset.id
-          ? await supabase
-              .from("video_comments")
-              .select("*")
-              .eq("media_asset_id", asset.id)
-              .order("time_stamp", { ascending: true })
-          : { data: null as any[] | null };
-
-        if (byAsset.data && byAsset.data.length > 0) {
-          setClientComments(byAsset.data);
-        } else {
-          const { data } = await supabase
-            .from("video_comments")
-            .select("*")
-            .eq("file_name", asset.fileName)
-            .eq("user_id", selectedClient)
-            .order("time_stamp", { ascending: true });
-          if (data) {
-            const projectId = asset.agencyProjectId ?? null;
-            setClientComments(
-              data.filter(
-                (row: { agency_project_id?: string | null }) =>
-                  !row.agency_project_id ||
-                  !projectId ||
-                  row.agency_project_id === projectId,
-              ),
-            );
-          }
-        }
-      }
+      requestAnimationFrame(() => {
+        document
+          .getElementById("admin-review-viewer")
+          ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      });
     }
     setActionLoading(null);
-  };
-
-  const jumpToTime = (time: number) => {
-    if (videoRef.current) {
-      videoRef.current.currentTime = time;
-      videoRef.current.play();
-    }
-  };
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60)
-      .toString()
-      .padStart(2, "0");
-    const s = Math.floor(seconds % 60)
-      .toString()
-      .padStart(2, "0");
-    return `${m}:${s}`;
   };
 
   // --- NEW: Invoice Functions ---
@@ -881,6 +841,29 @@ export default function AdminPortal() {
         project.client?.id === selectedClient,
     );
   }, [projects, selectedClient]);
+
+  const previewViewerMeta = useMemo(() => {
+    if (!previewFile?.assetId) {
+      return {
+        classificationLabel: null as string | null,
+        projectTitle: null as string | null,
+      };
+    }
+    const asset = clientAssets.find((a) => a.id === previewFile.assetId);
+    if (!asset) {
+      return {
+        classificationLabel: null as string | null,
+        projectTitle: null as string | null,
+      };
+    }
+    return {
+      classificationLabel: getAssetLifecycleLabel(asset, selectedClient),
+      projectTitle:
+        clientProjectsForSelected.find(
+          (project: any) => project.id === asset.agencyProjectId,
+        )?.title ?? null,
+    };
+  }, [previewFile, clientAssets, selectedClient, clientProjectsForSelected]);
 
   const projectsForDisplay = useMemo(() => {
     if (!selectedClient) return projects;
@@ -1577,6 +1560,9 @@ export default function AdminPortal() {
                             openFeedbackCount={
                               projectOpenFeedbackCounts[proj.id] ?? 0
                             }
+                            onPreviewAsset={(asset) => {
+                              void handlePreview(asset);
+                            }}
                           >
                             <ProjectFeedbackSummary
                               projectId={proj.id}
@@ -1800,43 +1786,71 @@ export default function AdminPortal() {
                             </button>
 
                             {expandedProjectAssets[proj.id] ? (
-                              <div className="px-4 pb-4">
+                              <div className="px-4 pb-4 space-y-2">
+                                <div className="flex justify-end">
+                                  <GalleryViewModeToggle
+                                    viewMode={adminAssetViewMode}
+                                    onChange={setAdminAssetViewMode}
+                                    compact
+                                  />
+                                </div>
                                 {linkedVaultAssets.length === 0 ? (
                                   <p className="text-[11px] text-text-gray/60 italic">
                                     No project assets linked yet.
                                   </p>
                                 ) : (
-                                  <ul className="space-y-2">
-                                    {linkedVaultAssets.map((asset) => (
-                                      <li
-                                        key={asset.id}
-                                        className="text-[11px] text-text-white/80 min-w-0"
-                                      >
-                                        <p
-                                          className="font-mono truncate"
-                                          title={asset.fileName}
-                                        >
-                                          {asset.fileName}
-                                        </p>
-                                        <p
-                                          className="text-[10px] text-text-gray mt-0.5 truncate"
-                                          title={formatAssetAttributionLine(
-                                            asset,
-                                            agencyUsers,
-                                            proj.title,
-                                            proj.clientId ?? proj.client?.id,
-                                          )}
-                                        >
-                                          {formatAssetAttributionLine(
-                                            asset,
-                                            agencyUsers,
-                                            proj.title,
-                                            proj.clientId ?? proj.client?.id,
-                                          )}
-                                        </p>
-                                      </li>
-                                    ))}
-                                  </ul>
+                                  <AdminAssetGallery
+                                    viewMode={adminAssetViewMode}
+                                    onPreview={(asset) => {
+                                      void handlePreview(asset);
+                                    }}
+                                    emptyLabel="No project assets linked yet."
+                                    items={linkedVaultAssets.map((asset) => {
+                                      const lifecycleLabel =
+                                        getAssetLifecycleLabel(
+                                          asset,
+                                          proj.clientId ?? proj.client?.id,
+                                        );
+                                      const isMasterDelivery =
+                                        lifecycleLabel === "Master Delivery";
+                                      return {
+                                        asset,
+                                        badges: isMasterDelivery ? (
+                                          <span className="text-[8px] uppercase tracking-widest px-1.5 py-0.5 border border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
+                                            Master Delivery
+                                          </span>
+                                        ) : null,
+                                        subtitle: formatAssetAttributionLine(
+                                          asset,
+                                          agencyUsers,
+                                          proj.title,
+                                          proj.clientId ?? proj.client?.id,
+                                        ),
+                                        actions: (
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              void handlePreview(asset)
+                                            }
+                                            className="p-1.5 text-gold-primary hover:text-white transition-colors"
+                                            title="Preview"
+                                          >
+                                            <svg
+                                              xmlns="http://www.w3.org/2000/svg"
+                                              width="14"
+                                              height="14"
+                                              viewBox="0 0 24 24"
+                                              fill="none"
+                                              stroke="currentColor"
+                                              strokeWidth="2"
+                                            >
+                                              <polygon points="5 3 19 12 5 21 5 3" />
+                                            </svg>
+                                          </button>
+                                        ),
+                                      };
+                                    })}
+                                  />
                                 )}
                               </div>
                             ) : null}
@@ -2244,62 +2258,73 @@ export default function AdminPortal() {
                       <h3 className="text-sm uppercase tracking-widest text-gold-primary">
                         Vault Assets
                       </h3>
-                      {!filesLoading && unassignedAssetCount > 0 ? (
-                        <span className="text-[9px] uppercase tracking-widest px-2 py-0.5 border border-white/10 bg-black/20 text-text-gray">
-                          {unassignedAssetCount} unlinked
-                        </span>
-                      ) : null}
+                      <div className="flex flex-wrap items-center gap-2">
+                        {!filesLoading && unassignedAssetCount > 0 ? (
+                          <span className="text-[9px] uppercase tracking-widest px-2 py-0.5 border border-white/10 bg-black/20 text-text-gray">
+                            {unassignedAssetCount} unlinked
+                          </span>
+                        ) : null}
+                        <GalleryViewModeToggle
+                          viewMode={adminAssetViewMode}
+                          onChange={setAdminAssetViewMode}
+                          compact
+                        />
+                      </div>
                     </div>
                     {filesLoading ? (
                       <p className="text-center py-8 text-gold-primary text-xs uppercase tracking-widest">
                         Scanning...
                       </p>
-                    ) : clientAssets.length === 0 ? (
-                      <p className="text-center py-8 text-text-gray italic text-xs">
-                        No assets found for this client.
-                      </p>
                     ) : (
-                      <ul className="space-y-3">
-                        {clientAssets.map((asset) => {
-                          const isVideo = getMediaFileCategory(asset.fileName) === "video";
-                          return (
-                            <li
-                              key={asset.id}
-                              className="flex justify-between items-center p-4 border border-white/5 bg-bg-body hover:border-gold-primary/20 transition-all gap-4"
-                            >
-                              <div className="overflow-hidden">
-                                <p className="text-text-white text-sm font-mono truncate max-w-[250px]">
-                                  {asset.fileName}
-                                </p>
-                                <div className="flex flex-wrap items-center gap-2 mt-1">
-                                  <p className="text-text-gray text-[10px] uppercase tracking-wider">
-                                    {asset.fileSize
-                                      ? `${(asset.fileSize / (1024 * 1024)).toFixed(2)} MB`
-                                      : "—"}
-                                  </p>
-                                  {!asset.agencyProjectId ? (
-                                    <span className="text-[8px] uppercase tracking-widest px-1.5 py-0.5 border border-white/10 bg-white/5 text-text-gray">
-                                      Unlinked
-                                    </span>
-                                  ) : null}
-                                </div>
-                                <p className="text-[10px] text-text-gray mt-1 truncate max-w-[320px]">
-                                  {formatAssetAttributionLine(
-                                    asset,
-                                    agencyUsers,
-                                    clientProjectsForSelected.find(
-                                      (project: any) =>
-                                        project.id === asset.agencyProjectId,
-                                    )?.title,
-                                    selectedClient,
-                                  )}
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-2">
+                      <AdminAssetGallery
+                        viewMode={adminAssetViewMode}
+                        onPreview={(asset) => {
+                          void handlePreview(asset);
+                        }}
+                        emptyLabel="No assets found for this client."
+                        items={clientAssets.map((asset) => {
+                          const isVideo =
+                            getMediaFileCategory(asset.fileName) === "video";
+                          const lifecycleLabel = getAssetLifecycleLabel(
+                            asset,
+                            selectedClient,
+                          );
+                          const isMasterDelivery =
+                            lifecycleLabel === "Master Delivery";
+                          return {
+                            asset,
+                            badges: (
+                              <>
+                                {isMasterDelivery ? (
+                                  <span className="text-[8px] uppercase tracking-widest px-1.5 py-0.5 border border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
+                                    Master Delivery
+                                  </span>
+                                ) : null}
+                                {!asset.agencyProjectId ? (
+                                  <span className="text-[8px] uppercase tracking-widest px-1.5 py-0.5 border border-white/10 bg-white/5 text-text-gray">
+                                    Unlinked
+                                  </span>
+                                ) : null}
+                              </>
+                            ),
+                            subtitle: formatAssetAttributionLine(
+                              asset,
+                              agencyUsers,
+                              clientProjectsForSelected.find(
+                                (project: any) =>
+                                  project.id === asset.agencyProjectId,
+                              )?.title,
+                              selectedClient,
+                            ),
+                            actions: (
+                              <>
                                 <select
-                                  value={(asset as any).agencyProjectId || ""}
+                                  value={asset.agencyProjectId || ""}
                                   onChange={(e) =>
-                                    handleLinkAssetToProject(asset.id, e.target.value)
+                                    void handleLinkAssetToProject(
+                                      asset.id,
+                                      e.target.value,
+                                    )
                                   }
                                   title="Link to project"
                                   className="bg-bg-panel text-gold-primary text-[9px] px-2 py-1.5 border border-white/10 outline-none cursor-pointer max-w-[120px] truncate"
@@ -2311,25 +2336,105 @@ export default function AdminPortal() {
                                     </option>
                                   ))}
                                 </select>
-                                <button onClick={() => handlePreview(asset)} className={`p-2 transition-colors ${isVideo ? "text-gold-primary hover:text-white" : "text-text-gray hover:text-white"}`}>
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3" /></svg>
+                                <button
+                                  type="button"
+                                  onClick={() => void handlePreview(asset)}
+                                  className={`p-2 transition-colors ${
+                                    isVideo
+                                      ? "text-gold-primary hover:text-white"
+                                      : "text-text-gray hover:text-white"
+                                  }`}
+                                  title="Preview"
+                                >
+                                  <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    width="16"
+                                    height="16"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                  >
+                                    <polygon points="5 3 19 12 5 21 5 3" />
+                                  </svg>
                                 </button>
-                                <button onClick={() => handleDownload(asset)} className="p-2 text-text-gray hover:text-gold-primary">
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" x2="12" y1="15" y2="3" /></svg>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDownload(asset)}
+                                  className="p-2 text-text-gray hover:text-gold-primary"
+                                  title="Download"
+                                >
+                                  <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    width="16"
+                                    height="16"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                  >
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                    <polyline points="7 10 12 15 17 10" />
+                                    <line x1="12" x2="12" y1="15" y2="3" />
+                                  </svg>
                                 </button>
-                                <button onClick={() => handleShare(asset)} className="p-2 text-text-gray hover:text-blue-400">
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleShare(asset)}
+                                  className="p-2 text-text-gray hover:text-blue-400"
+                                  title="Copy link"
+                                >
+                                  <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    width="16"
+                                    height="16"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                  >
+                                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                                  </svg>
                                 </button>
-                                <button onClick={() => handleDelete(asset)} className="p-2 text-text-gray hover:text-red-500">
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /><line x1="10" x2="10" y1="11" y2="17" /><line x1="14" x2="14" y1="11" y2="17" /></svg>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleDelete(asset)}
+                                  className="p-2 text-text-gray hover:text-red-500"
+                                  title="Delete"
+                                >
+                                  <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    width="16"
+                                    height="16"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                  >
+                                    <path d="M3 6h18" />
+                                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                                    <line x1="10" x2="10" y1="11" y2="17" />
+                                    <line x1="14" x2="14" y1="11" y2="17" />
+                                  </svg>
                                 </button>
-                              </div>
-                            </li>
-                          );
+                              </>
+                            ),
+                          };
                         })}
-                      </ul>
+                      />
                     )}
                   </div>
+
+                  {previewFile ? (
+                    <AdminReviewViewer
+                      previewFile={previewFile}
+                      classificationLabel={previewViewerMeta.classificationLabel}
+                      projectTitle={previewViewerMeta.projectTitle}
+                      onClose={() => setPreviewFile(null)}
+                    />
+                  ) : null}
                 </div>
               )}
             </section>
@@ -2337,95 +2442,6 @@ export default function AdminPortal() {
           </div>
         </div>
       </div>
-
-      {previewFile && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/98 backdrop-blur-sm p-4 md:p-10">
-          <button
-            onClick={() => setPreviewFile(null)}
-            className="absolute top-6 right-6 text-text-gray hover:text-white transition-colors"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="32"
-              height="32"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-          <div className="w-full max-w-7xl lg:h-[85vh] max-h-[95vh] lg:max-h-none flex flex-col lg:flex-row gap-0 border border-white/10 bg-bg-panel shadow-2xl overflow-y-auto lg:overflow-hidden">
-            <div className="flex-grow bg-black flex flex-col justify-center relative min-h-[50vh]">
-              <MediaPreviewPanel
-                fileName={previewFile.name}
-                previewPlaybackUrl={sanitizeAbsoluteMediaUrl(
-                  (previewFile.publicUrl ?? previewFile.url ?? "").trim(),
-                )}
-                imageClassName="max-h-[80vh] object-contain m-auto"
-                videoPreview={
-                  <StreamingVideoPlayer
-                    key={buildPreviewPlayerKey({
-                      ...previewFile,
-                      isCdn: true,
-                    })}
-                    playbackKey={buildPreviewPlayerKey({
-                      ...previewFile,
-                      isCdn: true,
-                    })}
-                    ref={videoRef}
-                    src={previewFile.publicUrl ?? previewFile.url}
-                    autoPlay
-                    controls
-                    className="w-full max-h-full outline-none"
-                    videoClassName="object-contain"
-                  />
-                }
-              />
-            </div>
-            {previewFile.isVideo && (
-              <div className="w-full lg:w-[400px] flex flex-col bg-bg-body shrink-0 border-t lg:border-t-0 lg:border-l border-white/5 h-[400px] lg:h-full">
-                <div className="p-6 border-b border-white/5 bg-bg-panel">
-                  <h3 className="text-gold-primary uppercase tracking-widest text-sm font-bold">
-                    Client Review Notes
-                  </h3>
-                  <p className="text-[10px] text-text-gray mt-1 uppercase tracking-wider">
-                    Inspect time-stamped feedback
-                  </p>
-                </div>
-                <div className="flex-grow overflow-y-auto p-4 space-y-4 custom-scrollbar">
-                  {clientComments.length === 0 ? (
-                    <p className="text-center text-text-gray text-xs italic mt-10">
-                      No client feedback yet.
-                    </p>
-                  ) : (
-                    clientComments.map((c) => (
-                      <div
-                        key={c.id}
-                        className="border border-white/5 p-4 bg-bg-panel hover:border-gold-primary/20 transition-all cursor-pointer"
-                        onClick={() => jumpToTime(c.time_stamp)}
-                      >
-                        <div className="flex justify-between items-center mb-3">
-                          <span className="bg-gold-primary text-black px-2 py-0.5 text-[10px] font-bold font-mono">
-                            {formatTime(c.time_stamp)}
-                          </span>
-                        </div>
-                        <p className="text-sm text-text-white leading-relaxed">
-                          {c.comment_text}
-                        </p>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </main>
   );
 }

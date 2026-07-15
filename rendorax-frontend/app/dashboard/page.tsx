@@ -30,11 +30,26 @@ import RenameModal from "@/components/modals/RenameModal";
 import DeleteModal from "@/components/modals/DeleteModal";
 import MoveModal from "@/components/modals/MoveModal";
 import { saveMediaAsset, fetchMediaAssets, buildMediaAssetFetchParams, getMediaPlaybackUrl, isMediaAssetProcessing, deleteMediaAsset, updateMediaAsset, type MediaAssetRecord } from "@/utils/mediaAssets";
-import { PROJECT_ASSET_FOLDER, isReviewVersionAsset } from "@/utils/projectAssetFolders";
+import {
+  PROJECT_ASSET_FOLDER,
+  isReviewVersionAsset,
+  isMasterDeliveryAsset,
+  resolveProjectAssetClassFromFolder,
+} from "@/utils/projectAssetFolders";
 import { sanitizeAbsoluteMediaUrl } from "@/utils/mediaAssets";
 import CloudAssetGallery from "@/components/dashboard/CloudAssetGallery";
 import ReviewDecisionBar from "@/components/dashboard/ReviewDecisionBar";
 import PictureLockBar from "@/components/dashboard/PictureLockBar";
+import MasterDeliveryBar, {
+  type PendingMasterDeliveryRegister,
+} from "@/components/dashboard/MasterDeliveryBar";
+import ClientMasterDeliveryPanel from "@/components/dashboard/ClientMasterDeliveryPanel";
+import MasterDeliveryUploadModal from "@/components/modals/MasterDeliveryUploadModal";
+import {
+  createMasterDeliveryEvent,
+  fetchMasterDelivery,
+  hasActiveMasterDelivery,
+} from "@/utils/masterDelivery";
 import GalleryBulkActionBar from "@/components/dashboard/GalleryBulkActionBar";
 import ToastHost from "@/components/ToastHost";
 import { useGalleryViewStyles } from "@/hooks/useGalleryViewStyles";
@@ -140,9 +155,10 @@ function formatEditorProjectOptionLabel(project: {
 type ProjectAssetClass =
   | "client_materials"
   | "working_files"
-  | "review_versions";
+  | "review_versions"
+  | "master_delivery";
 
-/** Rule A + Review folder: mutually exclusive project asset classes. */
+/** Rule A + Review/Master folders: mutually exclusive project asset classes. */
 function isClientMaterialsAsset(
   asset: { userId?: string | null } | null | undefined,
   projectClientId: string,
@@ -165,14 +181,25 @@ function matchesProjectAssetClass(
   if (!asset) return false;
 
   const isReview = isReviewVersionAsset(asset);
+  const isMaster = isMasterDeliveryAsset(asset);
 
   switch (assetClass) {
     case "review_versions":
       return isReview;
+    case "master_delivery":
+      return isMaster;
     case "client_materials":
-      return !isReview && isClientMaterialsAsset(asset, projectClientId);
+      return (
+        !isReview &&
+        !isMaster &&
+        isClientMaterialsAsset(asset, projectClientId)
+      );
     case "working_files":
-      return !isReview && !isClientMaterialsAsset(asset, projectClientId);
+      return (
+        !isReview &&
+        !isMaster &&
+        !isClientMaterialsAsset(asset, projectClientId)
+      );
     default:
       return false;
   }
@@ -385,6 +412,10 @@ export default function DashboardPage() {
   const [assetViewScope, setAssetViewScope] = useState<"all" | "active">("all");
   const [projectAssetClass, setProjectAssetClass] =
     useState<ProjectAssetClass>("client_materials");
+  const [isMasterDeliveryModalOpen, setIsMasterDeliveryModalOpen] =
+    useState(false);
+  const [pendingMasterDeliveryRegister, setPendingMasterDeliveryRegister] =
+    useState<PendingMasterDeliveryRegister | null>(null);
 
   type ClientProject = { id: string; title: string; status: string };
   const [clientProjects, setClientProjects] = useState<ClientProject[]>([]);
@@ -515,7 +546,46 @@ export default function DashboardPage() {
       (!isEditor || assetViewScope === "active"),
   );
 
-  const effectiveProjectAssetClass = projectAssetClass;
+  /** Sidebar reserved folders win over chip state so Client Masters open correctly. */
+  const folderDerivedAssetClass = useMemo(() => {
+    if (!isProjectAssetsClassificationActive || activeBin !== "cloud") {
+      return null;
+    }
+    return resolveProjectAssetClassFromFolder(currentFolder);
+  }, [
+    isProjectAssetsClassificationActive,
+    activeBin,
+    currentFolder,
+  ]);
+
+  const effectiveProjectAssetClass =
+    folderDerivedAssetClass ?? projectAssetClass;
+
+  const selectProjectAssetClass = useCallback(
+    (nextClass: ProjectAssetClass) => {
+      setProjectAssetClass(nextClass);
+      if (nextClass === "master_delivery") {
+        setActiveBin("cloud");
+        setCurrentFolder(PROJECT_ASSET_FOLDER.MASTER_DELIVERY);
+        return;
+      }
+      if (nextClass === "review_versions") {
+        setActiveBin("cloud");
+        setCurrentFolder(PROJECT_ASSET_FOLDER.REVIEW);
+        return;
+      }
+      // Leave reserved cloud folders so chip state is not overridden by path.
+      if (
+        resolveProjectAssetClassFromFolder(currentFolder) != null
+      ) {
+        setCurrentFolder("");
+      }
+      if (nextClass === "client_materials" || nextClass === "working_files") {
+        setActiveBin("vault");
+      }
+    },
+    [currentFolder, setActiveBin, setCurrentFolder],
+  );
 
   const reviewVersionsContextLabel = useMemo(() => {
     if (
@@ -534,12 +604,42 @@ export default function DashboardPage() {
     }
 
     if (!isEditor && activeProjectId) {
-      const project = clientProjects.find((entry) => entry.id === activeProjectId);
-      if (!project) return "Review Versions";
-      return `Review Versions — ${project.title}`;
+      const project = clientProjects.find((p) => p.id === activeProjectId);
+      if (project) return `Review Versions — ${project.title}`;
     }
 
-    return null;
+    return "Review Versions";
+  }, [
+    isProjectAssetsClassificationActive,
+    effectiveProjectAssetClass,
+    isEditor,
+    activeEditorProject,
+    activeProjectId,
+    clientProjects,
+  ]);
+
+  const masterDeliveryContextLabel = useMemo(() => {
+    if (
+      !isProjectAssetsClassificationActive ||
+      effectiveProjectAssetClass !== "master_delivery"
+    ) {
+      return null;
+    }
+
+    if (isEditor && activeEditorProject) {
+      const clientLabel = getProjectClientLabel(activeEditorProject.client);
+      if (clientLabel === "Unassigned Client") {
+        return `Master Delivery — ${activeEditorProject.title}`;
+      }
+      return `Master Delivery — ${clientLabel} · ${activeEditorProject.title}`;
+    }
+
+    if (!isEditor && activeProjectId) {
+      const project = clientProjects.find((p) => p.id === activeProjectId);
+      if (project) return `Master Delivery — ${project.title}`;
+    }
+
+    return "Master Delivery";
   }, [
     isProjectAssetsClassificationActive,
     effectiveProjectAssetClass,
@@ -1573,6 +1673,76 @@ export default function DashboardPage() {
     ],
   );
 
+  const handleMasterDeliveryUploadSuccess = useCallback(
+    async (
+      result: import("@/utils/r2Upload").R2UploadResult,
+      file: File,
+      meta: { sourceReviewAssetId: string | null },
+    ) => {
+      if (!user?.id) {
+        throw new Error("You must be signed in to save Master Delivery uploads.");
+      }
+      if (!activeProjectId?.trim()) {
+        throw new Error("Select an active project before uploading Master Delivery.");
+      }
+
+      const projectId = activeProjectId.trim();
+      const savedAsset = await saveMediaAsset({
+        fileName: file.name,
+        publicUrl: result.publicUrl,
+        objectKey: result.objectKey,
+        mimeType: file.type || "application/octet-stream",
+        userId: user.id,
+        folder: PROJECT_ASSET_FOLDER.MASTER_DELIVERY,
+        fileSize: file.size,
+        agencyProjectId: projectId,
+      });
+
+      setActiveBin("cloud");
+      setAssetViewScope("active");
+      setProjectAssetClass("master_delivery");
+      await fetchAndSetCloudAssets();
+      await fetchAllFolders();
+
+      try {
+        const existing = await fetchMasterDelivery(projectId);
+        const eventType = hasActiveMasterDelivery(existing.current)
+          ? "replaced"
+          : "delivered";
+
+        await createMasterDeliveryEvent({
+          mediaAssetId: savedAsset.id,
+          eventType,
+          sourceReviewAssetId: meta.sourceReviewAssetId,
+        });
+        setPendingMasterDeliveryRegister(null);
+      } catch (eventError) {
+        const message =
+          eventError instanceof Error
+            ? eventError.message
+            : "Failed to register Master Delivery event";
+        setPendingMasterDeliveryRegister({
+          mediaAssetId: savedAsset.id,
+          agencyProjectId: projectId,
+          sourceReviewAssetId: meta.sourceReviewAssetId,
+          fileName: savedAsset.fileName,
+        });
+        throw new Error(
+          `${message}. The file was saved under Master Delivery but is not registered yet. Use Retry Register Delivery.`,
+        );
+      }
+
+      return savedAsset;
+    },
+    [
+      user,
+      activeProjectId,
+      setActiveBin,
+      fetchAndSetCloudAssets,
+      fetchAllFolders,
+    ],
+  );
+
   const handleHeaderUpload = useCallback(
     async (files: FileList | null) => {
       await handleUpload(files);
@@ -1620,6 +1790,39 @@ export default function DashboardPage() {
       setCompareFile,
       activeProjectId,
     ],
+  );
+
+  const resolveCloudAssetForPreview = useCallback(
+    async (mediaAssetId: string): Promise<MediaAssetRecord | null> => {
+      const cached = cloudAssets.find((asset) => asset.id === mediaAssetId);
+      if (cached) return cached;
+
+      if (!user?.id || !activeProjectId) return null;
+
+      try {
+        const assets = await fetchMediaAssets({
+          userId: user.id,
+          agencyProjectId: activeProjectId,
+          folder: PROJECT_ASSET_FOLDER.MASTER_DELIVERY,
+        });
+        return assets.find((asset) => asset.id === mediaAssetId) ?? null;
+      } catch (error) {
+        console.error("Failed to resolve Master Delivery asset for preview:", error);
+        return null;
+      }
+    },
+    [cloudAssets, user?.id, activeProjectId],
+  );
+
+  const handleMasterDeliveryPreview = useCallback(
+    async (mediaAssetId: string) => {
+      const asset = await resolveCloudAssetForPreview(mediaAssetId);
+      if (!asset) {
+        throw new Error("Master Delivery file could not be loaded for preview");
+      }
+      handleCloudAssetPreview(asset);
+    },
+    [resolveCloudAssetForPreview, handleCloudAssetPreview],
   );
 
   const loadCloudAssets = useCallback(async () => {
@@ -1799,11 +2002,19 @@ export default function DashboardPage() {
     effectiveProjectAssetClass,
   ]);
 
+  const showClientMasterDeliveryPanel = Boolean(
+    !isEditor &&
+      activeProjectId &&
+      isProjectAssetsClassificationActive &&
+      effectiveProjectAssetClass === "master_delivery",
+  );
+
   const clientProjectHasNoAssets =
     !isEditor &&
     Boolean(activeProjectId) &&
     !clientProjectsLoading &&
     !isClientVaultRootSelected &&
+    !showClientMasterDeliveryPanel &&
     (activeBin === "cloud"
       ? !cloudAssetsLoading && classifiedCloudAssets.length === 0
       : !vaultFetchLoading &&
@@ -1856,6 +2067,42 @@ export default function DashboardPage() {
     return asset;
   }, [previewFile?.assetId, previewFile?.isCdn, cloudAssets]);
 
+  const previewMasterDeliveryAsset = useMemo(() => {
+    if (!previewFile?.assetId || !previewFile.isCdn) return null;
+    const asset = cloudAssets.find((item) => item.id === previewFile.assetId);
+    if (!asset || !isMasterDeliveryAsset(asset)) return null;
+    return asset;
+  }, [previewFile?.assetId, previewFile?.isCdn, cloudAssets]);
+
+  const masterDeliverySourceOptions = useMemo(() => {
+    if (!activeProjectId) return [];
+    return cloudAssets
+      .filter(
+        (asset) =>
+          asset.agencyProjectId === activeProjectId &&
+          isReviewVersionAsset(asset),
+      )
+      .slice()
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+      .map((asset) => ({ id: asset.id, fileName: asset.fileName }));
+  }, [cloudAssets, activeProjectId]);
+
+  const defaultMasterDeliverySourceId =
+    masterDeliverySourceOptions[0]?.id ?? null;
+
+  const showMasterDeliveryBar = Boolean(
+    isEditor &&
+      activeProjectId &&
+      effectiveProjectAssetClass === "master_delivery",
+  );
+
+  const showMasterDeliveryPreviewBar = Boolean(
+    isEditor &&
+      activeProjectId &&
+      previewMasterDeliveryAsset &&
+      effectiveProjectAssetClass !== "master_delivery",
+  );
+
   const reviewDecisionViewerRole = useMemo((): "client" | "editor" | "admin" => {
     const role = user?.app_metadata?.role;
     if (role === "admin") return "admin";
@@ -1907,6 +2154,21 @@ export default function DashboardPage() {
         uploadSession={uploadSession}
         onToggleScreenShare={isScreenSharing ? stopScreenShare : startScreenShare}
         onR2UploadSuccess={handleR2UploadSuccess}
+        activeProjectId={activeProjectId}
+        onOpenMasterDeliveryUpload={
+          isEditor
+            ? () => setIsMasterDeliveryModalOpen(true)
+            : undefined
+        }
+      />
+
+      <MasterDeliveryUploadModal
+        isOpen={isMasterDeliveryModalOpen}
+        onClose={() => setIsMasterDeliveryModalOpen(false)}
+        sourceOptions={masterDeliverySourceOptions}
+        defaultSourceReviewAssetId={defaultMasterDeliverySourceId}
+        projectRequired={!activeProjectId?.trim()}
+        onUploadSuccess={handleMasterDeliveryUploadSuccess}
       />
 
       <div className="shrink-0 bg-[#0a0a0f] border-b border-white/5 px-6 py-2 flex items-center justify-between gap-3 flex-wrap">
@@ -2276,7 +2538,8 @@ export default function DashboardPage() {
                       </h2>
                     </div>
                     {editorProjectAssetsContextLabel &&
-                    effectiveProjectAssetClass !== "review_versions" ? (
+                    effectiveProjectAssetClass !== "review_versions" &&
+                    effectiveProjectAssetClass !== "master_delivery" ? (
                       <p className="text-[10px] uppercase tracking-widest text-gray-500 truncate max-w-[360px]">
                         {editorProjectAssetsContextLabel}
                       </p>
@@ -2286,13 +2549,20 @@ export default function DashboardPage() {
                         {reviewVersionsContextLabel}
                       </p>
                     ) : null}
+                    {masterDeliveryContextLabel ? (
+                      <p className="text-[10px] uppercase tracking-widest text-gray-500 truncate max-w-[360px]">
+                        {masterDeliveryContextLabel}
+                      </p>
+                    ) : null}
                     {isProjectAssetsClassificationActive ? (
                       <div className="flex flex-wrap items-center gap-1 mt-1">
                         <button
                           type="button"
-                          onClick={() => setProjectAssetClass("client_materials")}
+                          onClick={() =>
+                            selectProjectAssetClass("client_materials")
+                          }
                           className={`text-[9px] uppercase tracking-widest px-2 py-1 border transition-colors ${
-                            projectAssetClass === "client_materials"
+                            effectiveProjectAssetClass === "client_materials"
                               ? "border-[#d4af37]/40 bg-[#d4af37]/15 text-[#d4af37]"
                               : "border-white/10 text-gray-500 hover:text-gray-300"
                           }`}
@@ -2302,9 +2572,11 @@ export default function DashboardPage() {
                         {isEditor ? (
                           <button
                             type="button"
-                            onClick={() => setProjectAssetClass("working_files")}
+                            onClick={() =>
+                              selectProjectAssetClass("working_files")
+                            }
                             className={`text-[9px] uppercase tracking-widest px-2 py-1 border transition-colors ${
-                              projectAssetClass === "working_files"
+                              effectiveProjectAssetClass === "working_files"
                                 ? "border-[#d4af37]/40 bg-[#d4af37]/15 text-[#d4af37]"
                                 : "border-white/10 text-gray-500 hover:text-gray-300"
                             }`}
@@ -2314,14 +2586,29 @@ export default function DashboardPage() {
                         ) : null}
                         <button
                           type="button"
-                          onClick={() => setProjectAssetClass("review_versions")}
+                          onClick={() =>
+                            selectProjectAssetClass("review_versions")
+                          }
                           className={`text-[9px] uppercase tracking-widest px-2 py-1 border transition-colors ${
-                            projectAssetClass === "review_versions"
+                            effectiveProjectAssetClass === "review_versions"
                               ? "border-[#d4af37]/40 bg-[#d4af37]/15 text-[#d4af37]"
                               : "border-white/10 text-gray-500 hover:text-gray-300"
                           }`}
                         >
                           Review Versions
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            selectProjectAssetClass("master_delivery")
+                          }
+                          className={`text-[9px] uppercase tracking-widest px-2 py-1 border transition-colors ${
+                            effectiveProjectAssetClass === "master_delivery"
+                              ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
+                              : "border-white/10 text-gray-500 hover:text-gray-300"
+                          }`}
+                        >
+                          Master Delivery
                         </button>
                       </div>
                     ) : null}
@@ -2396,27 +2683,79 @@ export default function DashboardPage() {
                         <div className="mb-4 flex items-center justify-between">
                           <div>
                             <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-[#d4af37]">
-                              Review & Delivery
+                              {showClientMasterDeliveryPanel
+                                ? "Master Delivery"
+                                : "Review & Delivery"}
                             </p>
                             <h3 className="mt-1 text-sm font-medium text-gray-200">
-                              Review versions and final delivery
+                              {showClientMasterDeliveryPanel
+                                ? "Final delivery package"
+                                : "Review versions and final delivery"}
                             </h3>
                           </div>
-                          <span className="rounded-full border border-white/10 bg-[#121217] px-2.5 py-1 text-[10px] text-gray-500">
-                            {classifiedCloudAssets.length} file
-                            {classifiedCloudAssets.length === 1 ? "" : "s"}
-                          </span>
+                          {!showClientMasterDeliveryPanel ? (
+                            <span className="rounded-full border border-white/10 bg-[#121217] px-2.5 py-1 text-[10px] text-gray-500">
+                              {classifiedCloudAssets.length} file
+                              {classifiedCloudAssets.length === 1 ? "" : "s"}
+                            </span>
+                          ) : null}
                         </div>
-                        <GalleryBulkActionBar label="cloud" />
-                        <CloudAssetGallery
-                          assets={classifiedCloudAssets}
-                          loading={cloudAssetsLoading}
-                          searchQuery={searchQuery}
-                          isEditor={isEditor}
-                          onPreviewAsset={handleCloudAssetPreview}
-                          onDeleteAsset={onDeleteCloudAsset}
-                          onRenameAsset={onRenameCloudAsset}
-                        />
+                        {showClientMasterDeliveryPanel && activeProjectId ? (
+                          <ClientMasterDeliveryPanel
+                            key={`client-md-${activeProjectId}`}
+                            agencyProjectId={activeProjectId}
+                            onViewInPlayer={handleMasterDeliveryPreview}
+                            resolvePreviewAsset={resolveCloudAssetForPreview}
+                            activePreviewAssetId={previewFile?.assetId ?? null}
+                          />
+                        ) : (
+                          <>
+                            <GalleryBulkActionBar label="cloud" />
+                            {showMasterDeliveryBar && activeProjectId ? (
+                              <div className="mb-4 overflow-hidden rounded border border-white/5">
+                                <MasterDeliveryBar
+                                  key={`md-bar-${activeProjectId}`}
+                                  agencyProjectId={activeProjectId}
+                                  onUploadRequest={() =>
+                                    setIsMasterDeliveryModalOpen(true)
+                                  }
+                                  pendingRegister={pendingMasterDeliveryRegister}
+                                  onPendingRegisterCleared={() =>
+                                    setPendingMasterDeliveryRegister(null)
+                                  }
+                                  onRegistered={() => {
+                                    void fetchAndSetCloudAssets();
+                                  }}
+                                />
+                              </div>
+                            ) : null}
+                            <CloudAssetGallery
+                              assets={classifiedCloudAssets}
+                              loading={cloudAssetsLoading}
+                              searchQuery={searchQuery}
+                              isEditor={isEditor}
+                              emptyTitle={
+                                effectiveProjectAssetClass === "master_delivery"
+                                  ? "No Master Delivery files yet."
+                                  : effectiveProjectAssetClass ===
+                                      "review_versions"
+                                    ? "No review versions are available here yet."
+                                    : "No assets match this filter."
+                              }
+                              emptyHint={
+                                effectiveProjectAssetClass === "master_delivery"
+                                  ? `Upload Master Delivery saves project-linked files to ${PROJECT_ASSET_FOLDER.MASTER_DELIVERY}.`
+                                  : effectiveProjectAssetClass ===
+                                      "review_versions"
+                                    ? `Upload Review Version saves project-linked cuts to ${PROJECT_ASSET_FOLDER.REVIEW}.`
+                                    : undefined
+                              }
+                              onPreviewAsset={handleCloudAssetPreview}
+                              onDeleteAsset={onDeleteCloudAsset}
+                              onRenameAsset={onRenameCloudAsset}
+                            />
+                          </>
+                        )}
                       </section>
                     ) : (
                       <section>
@@ -2527,6 +2866,24 @@ export default function DashboardPage() {
                               viewerRole={reviewDecisionViewerRole}
                             />
                           </>
+                        ) : null}
+                        {showMasterDeliveryPreviewBar &&
+                        activeProjectId &&
+                        isEditor ? (
+                          <MasterDeliveryBar
+                            key={`md-preview-${activeProjectId}-${previewMasterDeliveryAsset?.id}`}
+                            agencyProjectId={activeProjectId}
+                            onUploadRequest={() =>
+                              setIsMasterDeliveryModalOpen(true)
+                            }
+                            pendingRegister={pendingMasterDeliveryRegister}
+                            onPendingRegisterCleared={() =>
+                              setPendingMasterDeliveryRegister(null)
+                            }
+                            onRegistered={() => {
+                              void fetchAndSetCloudAssets();
+                            }}
+                          />
                         ) : null}
                       </>
                     )}

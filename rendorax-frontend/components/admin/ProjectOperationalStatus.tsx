@@ -22,6 +22,10 @@ function badgeClass(status: ProjectOperationalStatusKind): string {
       return "text-gold-primary";
     case "waiting_on_client":
       return "text-sky-300/90";
+    case "waiting_on_delivery":
+      return "text-sky-300/90";
+    case "delivered":
+      return "text-emerald-400";
     case "healthy":
       return "text-emerald-400/90";
     default:

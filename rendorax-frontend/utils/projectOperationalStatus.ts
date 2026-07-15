@@ -1,11 +1,15 @@
 import { isProjectReviewVersionFolder } from "@/utils/projectWorkflowSummary";
 import type { ReviewDecision } from "@/utils/reviewDecisions";
+import { hasActiveMasterDelivery } from "@/utils/masterDelivery";
+import type { MasterDeliveryEvent } from "@/utils/masterDelivery";
 
 export type ProjectOperationalStatusKind =
   | "blocked"
   | "overdue"
   | "waiting_on_editor"
   | "waiting_on_client"
+  | "waiting_on_delivery"
+  | "delivered"
   | "healthy";
 
 export type ProjectOperationalStatusResult = {
@@ -40,6 +44,8 @@ const STATUS_LABELS: Record<ProjectOperationalStatusKind, string> = {
   overdue: "OVERDUE",
   waiting_on_editor: "WAITING ON EDITOR",
   waiting_on_client: "WAITING ON CLIENT",
+  waiting_on_delivery: "WAITING ON DELIVERY",
+  delivered: "DELIVERED",
   healthy: "HEALTHY",
 };
 
@@ -156,14 +162,23 @@ export type ResolveProjectOperationalStatusInput = {
   assets: OperationalAssetLike[];
   latestDecisionByAssetId: Map<string, ReviewDecision | null | undefined>;
   openFeedbackCount: number;
+  /** Latest project Master Delivery event (from GET history current). */
+  masterDeliveryCurrent?: MasterDeliveryEvent | null;
   now?: Date;
 };
 
+/**
+ * Precedence:
+ * Blocked → Overdue → Waiting on Editor → Waiting on Client
+ * → Waiting on Delivery → Delivered → Healthy
+ */
 export function resolveProjectOperationalStatus(
   input: ResolveProjectOperationalStatusInput,
 ): ProjectOperationalStatusResult {
   const now = input.now ?? new Date();
   const openFeedbackCount = Math.max(0, input.openFeedbackCount || 0);
+  const deliveryCurrent = input.masterDeliveryCurrent ?? null;
+  const activeDelivery = hasActiveMasterDelivery(deliveryCurrent);
 
   if (!input.clientId?.trim()) {
     return {
@@ -214,6 +229,28 @@ export function resolveProjectOperationalStatus(
       status: "waiting_on_client",
       label: STATUS_LABELS.waiting_on_client,
       reason: "Submitted for review · awaiting client decision",
+    };
+  }
+
+  const reviewApproved = activeDecision?.status === "approved";
+
+  if (reviewApproved && !activeDelivery) {
+    return {
+      status: "waiting_on_delivery",
+      label: STATUS_LABELS.waiting_on_delivery,
+      reason: "Approved · awaiting Master Delivery",
+    };
+  }
+
+  if (activeDelivery) {
+    const fileName =
+      deliveryCurrent?.mediaAsset?.fileName?.trim() ||
+      deliveryCurrent?.mediaAssetId ||
+      "Master delivery";
+    return {
+      status: "delivered",
+      label: STATUS_LABELS.delivered,
+      reason: fileName,
     };
   }
 

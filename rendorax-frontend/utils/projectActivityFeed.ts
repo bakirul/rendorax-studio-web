@@ -2,6 +2,7 @@ import { PROJECT_ASSET_FOLDER } from "@/utils/projectAssetFolders";
 import type { MediaAssetRecord } from "@/utils/mediaAssets";
 import type { ReviewDecision } from "@/utils/reviewDecisions";
 import type { PictureLockEvent } from "@/utils/pictureLock";
+import type { MasterDeliveryEvent } from "@/utils/masterDelivery";
 import {
   isLifecycleSpecialFolder,
   isProjectReviewVersionFolder,
@@ -17,7 +18,11 @@ export type ProjectActivityEventType =
   | "approved"
   | "admin_override"
   | "picture_locked"
-  | "picture_unlocked";
+  | "picture_unlocked"
+  | "master_delivered"
+  | "master_replaced"
+  | "master_restored"
+  | "master_expired";
 
 export type ProjectActivityEvent = {
   id: string;
@@ -73,6 +78,14 @@ export function getProjectActivityLabel(type: ProjectActivityEventType): string 
       return "Picture locked";
     case "picture_unlocked":
       return "Picture unlocked";
+    case "master_delivered":
+      return "Delivered";
+    case "master_replaced":
+      return "Replaced delivery";
+    case "master_restored":
+      return "Restored delivery";
+    case "master_expired":
+      return "Expired delivery";
     default:
       return "Activity";
   }
@@ -90,7 +103,6 @@ export function classifyUploadActivityType(
     return null;
   }
 
-  // Defensive: any other special folder should not appear as materials/working.
   if (isLifecycleSpecialFolder(asset.folder)) {
     return null;
   }
@@ -190,6 +202,43 @@ export function buildPictureLockActivityEvents(
   return events;
 }
 
+export function buildMasterDeliveryActivityEvents(
+  deliveryEvents: MasterDeliveryEvent[],
+): ProjectActivityEvent[] {
+  const events: ProjectActivityEvent[] = [];
+
+  for (const event of deliveryEvents) {
+    let type: ProjectActivityEventType;
+    switch (event.eventType) {
+      case "delivered":
+        type = "master_delivered";
+        break;
+      case "replaced":
+        type = "master_replaced";
+        break;
+      case "restored":
+        type = "master_restored";
+        break;
+      case "expired":
+        type = "master_expired";
+        break;
+      default:
+        continue;
+    }
+
+    events.push({
+      id: `master-delivery:${event.id}`,
+      type,
+      actorLabel: resolveWorkflowActorLabel(event.actor),
+      assetLabel: event.mediaAsset?.fileName,
+      note: event.note?.trim() || undefined,
+      createdAt: event.createdAt,
+    });
+  }
+
+  return events;
+}
+
 export function mergeProjectActivityEvents(
   groups: ProjectActivityEvent[][],
   limit = 8,
@@ -197,6 +246,8 @@ export function mergeProjectActivityEvents(
   return groups
     .flat()
     .slice()
-    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))
+    .sort((a, b) =>
+      a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0,
+    )
     .slice(0, limit);
 }
