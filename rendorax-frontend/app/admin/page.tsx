@@ -280,6 +280,12 @@ export default function AdminPortal() {
   // --- Projects & Users (Prisma AgencyProject) ---
   const [projects, setProjects] = useState<any[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(true);
+  const [archivedProjects, setArchivedProjects] = useState<any[]>([]);
+  const [archivedProjectsLoading, setArchivedProjectsLoading] = useState(true);
+  const [archivedSectionExpanded, setArchivedSectionExpanded] = useState(false);
+  const [archiveConfirmProject, setArchiveConfirmProject] = useState<any | null>(
+    null,
+  );
   const [agencyUsers, setAgencyUsers] = useState<any[]>([]);
   const [showClientForm, setShowClientForm] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -345,6 +351,26 @@ export default function AdminPortal() {
       console.error("Failed to load projects");
     } finally {
       setProjectsLoading(false);
+    }
+  };
+
+  const loadArchivedProjects = async () => {
+    setArchivedProjectsLoading(true);
+    try {
+      const res = await fetch("/api/agency/projects?includeArchived=true");
+      const data = await res.json();
+      const all = Array.isArray(data.projects) ? data.projects : [];
+      setArchivedProjects(
+        all.filter(
+          (project: any) =>
+            project?.archivedAt != null && project.archivedAt !== "",
+        ),
+      );
+    } catch {
+      console.error("Failed to load archived projects");
+      setArchivedProjects([]);
+    } finally {
+      setArchivedProjectsLoading(false);
     }
   };
 
@@ -497,6 +523,7 @@ export default function AdminPortal() {
     fetch("/api/agency/me").catch(() => {});
     void fetchClientFolders();
     void loadProjects();
+    void loadArchivedProjects();
     void loadUsers();
     void loadTasks();
 
@@ -612,6 +639,97 @@ export default function AdminPortal() {
         current === item.projectId ? null : current,
       );
     }, 2800);
+  };
+
+  const handleArchiveProject = async () => {
+    if (!archiveConfirmProject?.id) return;
+    const projectId = archiveConfirmProject.id as string;
+    setActionLoading(`archive_${projectId}`);
+
+    try {
+      const res = await fetch(
+        `/api/agency/projects/${encodeURIComponent(projectId)}/archive`,
+        { method: "PATCH" },
+      );
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setMessage({
+          type: "error",
+          text:
+            (data as { error?: string }).error || "Failed to archive project.",
+        });
+        return;
+      }
+
+      setProjects((prev) => prev.filter((project) => project.id !== projectId));
+      setArchivedProjects((prev) => {
+        const without = prev.filter((project) => project.id !== projectId);
+        return [data, ...without];
+      });
+      setTasks((prev) =>
+        prev.filter(
+          (task: any) =>
+            task.projectId !== projectId && task.project?.id !== projectId,
+        ),
+      );
+
+      if (phaseProjectId === projectId) {
+        setPhaseProjectId(null);
+      }
+      if (highlightedProjectId === projectId) {
+        setHighlightedProjectId(null);
+      }
+
+      setArchiveConfirmProject(null);
+      setMessage({
+        type: "success",
+        text: "Project archived. Data and files are preserved.",
+      });
+      void loadTasks();
+    } catch {
+      setMessage({ type: "error", text: "Failed to archive project." });
+    } finally {
+      setActionLoading(null);
+      setTimeout(() => setMessage(null), 4000);
+    }
+  };
+
+  const handleRestoreProject = async (projectId: string) => {
+    setActionLoading(`restore_${projectId}`);
+
+    try {
+      const res = await fetch(
+        `/api/agency/projects/${encodeURIComponent(projectId)}/restore`,
+        { method: "PATCH" },
+      );
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setMessage({
+          type: "error",
+          text:
+            (data as { error?: string }).error || "Failed to restore project.",
+        });
+        return;
+      }
+
+      setArchivedProjects((prev) =>
+        prev.filter((project) => project.id !== projectId),
+      );
+      setProjects((prev) => {
+        const without = prev.filter((project) => project.id !== projectId);
+        return [data, ...without];
+      });
+      setMessage({ type: "success", text: "Project restored." });
+      void loadProjects();
+      void loadTasks();
+    } catch {
+      setMessage({ type: "error", text: "Failed to restore project." });
+    } finally {
+      setActionLoading(null);
+      setTimeout(() => setMessage(null), 4000);
+    }
   };
 
   const updateStatus = async (newStatus: string) => {
@@ -1594,9 +1712,21 @@ export default function AdminPortal() {
                                 </p>
                               )}
                             </div>
-                            <span className="text-[10px] text-text-gray uppercase tracking-widest shrink-0 sm:pt-1">
-                              {new Date(proj.createdAt).toLocaleDateString()}
-                            </span>
+                            <div className="flex flex-col items-end gap-2 shrink-0 sm:pt-1">
+                              <span className="text-[10px] text-text-gray uppercase tracking-widest">
+                                {new Date(proj.createdAt).toLocaleDateString()}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setArchiveConfirmProject(proj)}
+                                disabled={
+                                  actionLoading === `archive_${proj.id}`
+                                }
+                                className="text-[9px] uppercase tracking-widest px-2.5 py-1 border border-white/10 text-text-gray hover:text-amber-300 hover:border-amber-500/40 transition-colors disabled:opacity-40"
+                              >
+                                Archive
+                              </button>
+                            </div>
                           </div>
 
                           <ProjectWorkflowSummary
@@ -1907,6 +2037,91 @@ export default function AdminPortal() {
                     })}
                   </div>
                 )}
+              </div>
+
+              <div className="bg-bg-panel border border-white/5 p-6 mt-6">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setArchivedSectionExpanded((prev) => !prev)
+                  }
+                  className="w-full flex items-center justify-between gap-3 text-left"
+                >
+                  <h3 className="text-sm uppercase tracking-widest text-gold-primary">
+                    Archived Projects{" "}
+                    <span className="text-text-gray">
+                      (
+                      {archivedProjectsLoading
+                        ? "…"
+                        : archivedProjects.length}
+                      )
+                    </span>
+                  </h3>
+                  <span className="text-[10px] uppercase tracking-widest text-text-gray">
+                    {archivedSectionExpanded ? "Collapse" : "Expand"}
+                  </span>
+                </button>
+
+                {archivedSectionExpanded ? (
+                  <div className="mt-4 border-t border-white/10 pt-4">
+                    {archivedProjectsLoading ? (
+                      <p className="text-[11px] text-text-gray/70">
+                        Loading archived projects…
+                      </p>
+                    ) : archivedProjects.length === 0 ? (
+                      <p className="text-[11px] text-text-gray/70 italic">
+                        No archived projects.
+                      </p>
+                    ) : (
+                      <ul className="space-y-2">
+                        {archivedProjects.map((project: any) => (
+                          <li
+                            key={project.id}
+                            className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border border-white/5 bg-bg-body p-3"
+                          >
+                            <div className="min-w-0">
+                              <p
+                                className="text-sm text-gold-primary font-medium truncate"
+                                title={project.title}
+                              >
+                                {project.title}
+                              </p>
+                              <p className="mt-0.5 text-[11px] text-text-gray truncate">
+                                {getProjectClientLabel(project.client)}
+                                {" · "}
+                                <span className="text-text-white/80">
+                                  {project.status || "—"}
+                                </span>
+                              </p>
+                              <p className="mt-0.5 text-[10px] uppercase tracking-wider text-text-gray/70">
+                                Archived{" "}
+                                {project.archivedAt
+                                  ? new Date(
+                                      project.archivedAt,
+                                    ).toLocaleDateString()
+                                  : "—"}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                void handleRestoreProject(project.id)
+                              }
+                              disabled={
+                                actionLoading === `restore_${project.id}`
+                              }
+                              className="shrink-0 text-[10px] uppercase tracking-widest px-3 py-1.5 border border-gold-primary/30 bg-gold-primary/10 text-gold-primary hover:bg-gold-primary hover:text-black transition-colors disabled:opacity-40"
+                            >
+                              {actionLoading === `restore_${project.id}`
+                                ? "Restoring…"
+                                : "Restore"}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ) : null}
               </div>
             </section>
 
@@ -2489,6 +2704,54 @@ export default function AdminPortal() {
           </div>
         </div>
       </div>
+
+      {archiveConfirmProject ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+          <div className="w-full max-w-md border border-white/10 bg-bg-panel p-6 shadow-2xl">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-gold-primary">
+              Archive Project
+            </p>
+            <p
+              className="mt-3 text-lg text-text-white font-medium truncate"
+              title={archiveConfirmProject.title}
+            >
+              {archiveConfirmProject.title}
+            </p>
+            <p className="mt-1 text-sm text-text-gray truncate">
+              Client: {getProjectClientLabel(archiveConfirmProject.client)}
+            </p>
+            <p className="mt-4 text-[12px] text-text-gray leading-relaxed">
+              This hides the project from active Admin, Client, and Editor
+              workspaces and removes it from the Operations Queue. Tasks,
+              assets, reviews, delivery history, and files are preserved.
+            </p>
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setArchiveConfirmProject(null)}
+                disabled={
+                  actionLoading === `archive_${archiveConfirmProject.id}`
+                }
+                className="px-3 py-1.5 text-[10px] uppercase tracking-widest border border-white/10 text-text-gray hover:text-white transition-colors disabled:opacity-40"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleArchiveProject()}
+                disabled={
+                  actionLoading === `archive_${archiveConfirmProject.id}`
+                }
+                className="px-3 py-1.5 text-[10px] uppercase tracking-widest border border-amber-500/40 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25 transition-colors disabled:opacity-40"
+              >
+                {actionLoading === `archive_${archiveConfirmProject.id}`
+                  ? "Archiving…"
+                  : "Confirm Archive"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

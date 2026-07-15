@@ -1,9 +1,16 @@
 import { NextResponse } from "next/server";
 import { proxyAgencyRequest } from "@/utils/agencyBackend";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const upstream = await proxyAgencyRequest("/projects", { method: "GET" });
+    const url = new URL(request.url);
+    const includeArchived =
+      url.searchParams.get("includeArchived") === "true"
+        ? "?includeArchived=true"
+        : "";
+    const upstream = await proxyAgencyRequest(`/projects${includeArchived}`, {
+      method: "GET",
+    });
     const payload = await upstream.json().catch(() => ({}));
     return NextResponse.json(payload, { status: upstream.status });
   } catch (error) {

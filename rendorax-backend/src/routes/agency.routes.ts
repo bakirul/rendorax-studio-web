@@ -70,6 +70,9 @@ router.get("/projects", async (req: AuthenticatedRequest, res: Response) => {
 
   const prisma = getPrisma(req);
   const role = mapSupabaseRoleToAgencyRole(req.user?.role);
+  const includeArchived =
+    isAdminRole(req.user?.role) &&
+    String(req.query.includeArchived ?? "").toLowerCase() === "true";
 
   let where: Prisma.AgencyProjectWhereInput;
   if (role === "admin") {
@@ -78,6 +81,10 @@ router.get("/projects", async (req: AuthenticatedRequest, res: Response) => {
     where = { clientId: actor.id };
   } else {
     where = { ownerId: actor.id };
+  }
+
+  if (!includeArchived) {
+    where = { ...where, archivedAt: null };
   }
 
   try {
@@ -334,6 +341,11 @@ router.patch("/projects/:id", async (req: AuthenticatedRequest, res: Response) =
     return;
   }
 
+  if (project.archivedAt) {
+    res.status(409).json({ error: "Cannot update phase on an archived project" });
+    return;
+  }
+
   if (!isAdminRole(req.user?.role)) {
     const isOwner = project.ownerId === actor.id;
     let hasAssignedTask = false;
@@ -365,6 +377,104 @@ router.patch("/projects/:id", async (req: AuthenticatedRequest, res: Response) =
     res.status(500).json({ error: "Failed to update project status" });
   }
 });
+
+router.patch(
+  "/projects/:id/archive",
+  async (req: AuthenticatedRequest, res: Response) => {
+    const actor = await requireAgencyUser(req, res);
+    if (!actor) return;
+
+    if (!isAdminRole(req.user?.role)) {
+      res.status(403).json({ error: "Admin access required" });
+      return;
+    }
+
+    const projectId = String(req.params.id).trim();
+    if (!projectId) {
+      res.status(400).json({ error: "projectId is required" });
+      return;
+    }
+
+    const prisma = getPrisma(req);
+
+    try {
+      const project = await prisma.agencyProject.findUnique({
+        where: { id: projectId },
+        select: { id: true, archivedAt: true },
+      });
+
+      if (!project) {
+        res.status(404).json({ error: "Project not found" });
+        return;
+      }
+
+      if (project.archivedAt) {
+        res.status(409).json({ error: "Project is already archived" });
+        return;
+      }
+
+      const updated = await prisma.agencyProject.update({
+        where: { id: projectId },
+        data: { archivedAt: new Date() },
+        include: projectResponseInclude,
+      });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Failed to archive project:", error);
+      res.status(500).json({ error: "Failed to archive project" });
+    }
+  },
+);
+
+router.patch(
+  "/projects/:id/restore",
+  async (req: AuthenticatedRequest, res: Response) => {
+    const actor = await requireAgencyUser(req, res);
+    if (!actor) return;
+
+    if (!isAdminRole(req.user?.role)) {
+      res.status(403).json({ error: "Admin access required" });
+      return;
+    }
+
+    const projectId = String(req.params.id).trim();
+    if (!projectId) {
+      res.status(400).json({ error: "projectId is required" });
+      return;
+    }
+
+    const prisma = getPrisma(req);
+
+    try {
+      const project = await prisma.agencyProject.findUnique({
+        where: { id: projectId },
+        select: { id: true, archivedAt: true },
+      });
+
+      if (!project) {
+        res.status(404).json({ error: "Project not found" });
+        return;
+      }
+
+      if (!project.archivedAt) {
+        res.status(409).json({ error: "Project is not archived" });
+        return;
+      }
+
+      const updated = await prisma.agencyProject.update({
+        where: { id: projectId },
+        data: { archivedAt: null },
+        include: projectResponseInclude,
+      });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Failed to restore project:", error);
+      res.status(500).json({ error: "Failed to restore project" });
+    }
+  },
+);
 
 router.post("/tasks", async (req: AuthenticatedRequest, res: Response) => {
   const actor = await requireAgencyUser(req, res);
@@ -503,16 +613,24 @@ router.get("/tasks", async (req: AuthenticatedRequest, res: Response) => {
 
   let where: Prisma.TaskWhereInput;
   if (role === "admin") {
-    where = {};
+    where = { project: { archivedAt: null } };
   } else if (role === "client") {
     where = {
-      OR: [
-        { assigneeId: actor.id },
-        { project: { clientId: actor.id } },
+      AND: [
+        { project: { archivedAt: null } },
+        {
+          OR: [
+            { assigneeId: actor.id },
+            { project: { clientId: actor.id } },
+          ],
+        },
       ],
     };
   } else {
-    where = { assigneeId: actor.id };
+    where = {
+      assigneeId: actor.id,
+      project: { archivedAt: null },
+    };
   }
 
   try {
