@@ -13,6 +13,7 @@ import {
   ensureAgencyUser,
   mapSupabaseRoleToAgencyRole,
 } from "../lib/agencyUsers";
+import { assertActiveAgencyProjectAccess } from "../lib/agencyProjectAccess";
 import { generatePresignedDownloadUrl } from "../lib/r2";
 
 const router = Router();
@@ -94,53 +95,6 @@ function isReviewVersionAsset(asset: {
 }): boolean {
   if (!asset.agencyProjectId) return false;
   return folderMatches(asset.folder, REVIEW_FOLDER);
-}
-
-type ProjectAccessResult =
-  | { ok: true; projectId: string }
-  | { ok: false; status: 403 | 404; error: string };
-
-async function assertProjectAccess(
-  prisma: PrismaClient,
-  req: AuthenticatedRequest,
-  projectId: string,
-): Promise<ProjectAccessResult> {
-  const actorId = req.user?.id;
-  if (!actorId) {
-    return { ok: false, status: 403, error: "Unauthorized" };
-  }
-
-  const project = await prisma.agencyProject.findUnique({
-    where: { id: projectId.trim() },
-    select: { id: true, ownerId: true, clientId: true },
-  });
-
-  if (!project) {
-    return { ok: false, status: 404, error: "Project not found" };
-  }
-
-  if (isClientRole(req.user?.role)) {
-    if (project.clientId !== actorId) {
-      return { ok: false, status: 403, error: "Forbidden" };
-    }
-    return { ok: true, projectId: project.id };
-  }
-
-  if (isAdminRole(req.user?.role)) {
-    return { ok: true, projectId: project.id };
-  }
-
-  const isProjectOwner = project.ownerId === actorId;
-  const assignedTask = await prisma.task.findFirst({
-    where: { assigneeId: actorId, projectId: project.id },
-    select: { id: true },
-  });
-
-  if (!isProjectOwner && !assignedTask) {
-    return { ok: false, status: 403, error: "Forbidden" };
-  }
-
-  return { ok: true, projectId: project.id };
 }
 
 function serializeAssetSummary(
@@ -295,7 +249,7 @@ router.get("/download", async (req: AuthenticatedRequest, res: Response) => {
       return;
     }
 
-    const access = await assertProjectAccess(
+    const access = await assertActiveAgencyProjectAccess(
       prisma,
       req,
       asset.agencyProjectId,
@@ -457,7 +411,7 @@ router.get("/", async (req: AuthenticatedRequest, res: Response) => {
   }
 
   const prisma = getPrisma(req);
-  const access = await assertProjectAccess(prisma, req, agencyProjectId);
+  const access = await assertActiveAgencyProjectAccess(prisma, req, agencyProjectId);
   if (!access.ok) {
     res.status(access.status).json({ error: access.error });
     return;
@@ -557,7 +511,7 @@ router.post("/", async (req: AuthenticatedRequest, res: Response) => {
     return;
   }
 
-  const access = await assertProjectAccess(
+  const access = await assertActiveAgencyProjectAccess(
     prisma,
     req,
     asset.agencyProjectId!,

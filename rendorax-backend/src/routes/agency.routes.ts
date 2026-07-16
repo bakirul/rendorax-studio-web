@@ -6,11 +6,14 @@ import {
   type AuthenticatedRequest,
 } from "../middleware/requireAuth";
 import { ensureAgencyUser, mapSupabaseRoleToAgencyRole } from "../lib/agencyUsers";
+import { ARCHIVED_PROJECT_WORKSPACE_ERROR } from "../lib/agencyProjectAccess";
+import { resolveEditorSpecialization } from "../lib/editorSpecializations";
 import { getSupabaseAdminClient } from "../lib/supabaseAdmin";
 import reviewDecisionsRouter from "./review-decisions.routes";
 import videoCommentsRouter from "./video-comments.routes";
 import pictureLockRouter from "./picture-lock.routes";
 import masterDeliveryRouter from "./master-delivery.routes";
+import projectRequestsRouter from "./project-requests.routes";
 
 const router = Router();
 
@@ -118,7 +121,13 @@ router.get("/users", async (req: AuthenticatedRequest, res: Response) => {
 
   try {
     const users = await prisma.user.findMany({
-      select: { id: true, email: true, displayName: true, role: true },
+      select: {
+        id: true,
+        email: true,
+        displayName: true,
+        role: true,
+        specialization: true,
+      },
       orderBy: { email: "asc" },
     });
 
@@ -128,6 +137,8 @@ router.get("/users", async (req: AuthenticatedRequest, res: Response) => {
     res.status(500).json({ error: "Failed to fetch users" });
   }
 });
+
+const PROVISIONABLE_ROLES = new Set(["client", "editor"]);
 
 router.post("/users", async (req: AuthenticatedRequest, res: Response) => {
   const actor = await requireAgencyUser(req, res);
@@ -141,7 +152,7 @@ router.post("/users", async (req: AuthenticatedRequest, res: Response) => {
   const supabaseAdmin = getSupabaseAdminClient();
   if (!supabaseAdmin) {
     console.error("[agency] SUPABASE_SERVICE_ROLE_KEY or SUPABASE_URL is not configured");
-    res.status(503).json({ error: "Client provisioning unavailable" });
+    res.status(503).json({ error: "User provisioning unavailable" });
     return;
   }
 
@@ -150,6 +161,8 @@ router.post("/users", async (req: AuthenticatedRequest, res: Response) => {
     typeof body.displayName === "string" ? body.displayName.trim() : "";
   const email = normalizeEmail(body.email);
   const password = typeof body.password === "string" ? body.password : "";
+  const requestedRole =
+    typeof body.role === "string" ? body.role.trim().toLowerCase() : "client";
 
   if (!displayName) {
     res.status(400).json({ error: "displayName is required" });
@@ -166,6 +179,35 @@ router.post("/users", async (req: AuthenticatedRequest, res: Response) => {
     return;
   }
 
+  if (!PROVISIONABLE_ROLES.has(requestedRole)) {
+    res.status(400).json({
+      error: 'role must be "client" or "editor"',
+    });
+    return;
+  }
+
+  const provisionRole = requestedRole as "client" | "editor";
+  const roleLabel = provisionRole === "editor" ? "Editor" : "Client";
+
+  let specialization: string | null = null;
+  if (provisionRole === "editor") {
+    const resolved = resolveEditorSpecialization(body.specialization);
+    if (!resolved.ok) {
+      res.status(400).json({ error: resolved.error });
+      return;
+    }
+    specialization = resolved.value;
+  } else if (
+    body.specialization !== undefined &&
+    body.specialization !== null &&
+    String(body.specialization).trim() !== ""
+  ) {
+    res.status(400).json({
+      error: "specialization is only allowed when role is editor",
+    });
+    return;
+  }
+
   const prisma = getPrisma(req);
 
   const existingByEmail = await prisma.user.findUnique({ where: { email } });
@@ -174,23 +216,30 @@ router.post("/users", async (req: AuthenticatedRequest, res: Response) => {
     return;
   }
 
+  const userMetadata: Record<string, string> = { full_name: displayName };
+  if (specialization) {
+    userMetadata.specialization = specialization;
+  }
+
   const { data: createData, error: createError } =
     await supabaseAdmin.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
-      user_metadata: { full_name: displayName },
-      app_metadata: { role: "client" },
+      user_metadata: userMetadata,
+      app_metadata: { role: provisionRole },
     });
 
   if (createError || !createData.user?.id) {
-    const message = createError?.message ?? "Failed to create client";
+    const message = createError?.message ?? `Failed to create ${roleLabel.toLowerCase()}`;
     if (isDuplicateAuthError(message)) {
       res.status(409).json({ error: "A user with this email already exists" });
       return;
     }
-    console.error("Failed to create client:", message);
-    res.status(502).json({ error: "Failed to provision client account" });
+    console.error(`Failed to create ${roleLabel.toLowerCase()}:`, message);
+    res.status(502).json({
+      error: `Failed to provision ${roleLabel.toLowerCase()} account`,
+    });
     return;
   }
 
@@ -203,27 +252,40 @@ router.post("/users", async (req: AuthenticatedRequest, res: Response) => {
         id: supabaseUserId,
         email,
         displayName,
-        role: "client",
+        role: provisionRole,
+        specialization,
       },
       update: {
         email,
         displayName,
-        role: "client",
+        role: provisionRole,
+        specialization,
       },
-      select: { id: true, email: true, displayName: true, role: true },
+      select: {
+        id: true,
+        email: true,
+        displayName: true,
+        role: true,
+        specialization: true,
+      },
     });
 
     console.info(
-      `[agency] Client provisioned by admin ${actor.id}: user ${user.id}`,
+      `[agency] ${roleLabel} provisioned by admin ${actor.id}: user ${user.id} role=${user.role}`,
     );
 
     res.status(201).json({ user });
   } catch (error) {
-    console.error("Failed to sync Prisma user after client creation:", error);
+    console.error(
+      `Failed to sync Prisma user after ${roleLabel.toLowerCase()} creation:`,
+      error,
+    );
     await supabaseAdmin.auth.admin.deleteUser(supabaseUserId).catch((deleteError) => {
       console.error("Failed to roll back Supabase user after Prisma error:", deleteError);
     });
-    res.status(500).json({ error: "Failed to save client record" });
+    res.status(500).json({
+      error: `Failed to save ${roleLabel.toLowerCase()} record`,
+    });
   }
 });
 
@@ -342,7 +404,7 @@ router.patch("/projects/:id", async (req: AuthenticatedRequest, res: Response) =
   }
 
   if (project.archivedAt) {
-    res.status(409).json({ error: "Cannot update phase on an archived project" });
+    res.status(409).json({ error: ARCHIVED_PROJECT_WORKSPACE_ERROR });
     return;
   }
 
@@ -514,6 +576,11 @@ router.post("/tasks", async (req: AuthenticatedRequest, res: Response) => {
     return;
   }
 
+  if (project.archivedAt) {
+    res.status(409).json({ error: ARCHIVED_PROJECT_WORKSPACE_ERROR });
+    return;
+  }
+
   if (role !== "admin" && project.ownerId !== actor.id) {
     res.status(403).json({ error: "You can only add tasks to projects you own" });
     return;
@@ -559,7 +626,7 @@ router.post("/tasks", async (req: AuthenticatedRequest, res: Response) => {
       },
       include: {
         project: { select: { id: true, title: true, status: true } },
-        assignee: { select: { id: true, email: true, displayName: true, role: true } },
+        assignee: { select: { id: true, email: true, displayName: true, role: true, specialization: true } },
       },
     });
 
@@ -600,7 +667,13 @@ const taskResponseInclude = {
     },
   },
   assignee: {
-    select: { id: true, email: true, displayName: true, role: true },
+    select: {
+      id: true,
+      email: true,
+      displayName: true,
+      role: true,
+      specialization: true,
+    },
   },
 } satisfies Prisma.TaskInclude;
 
@@ -668,10 +741,18 @@ router.patch("/tasks/:id", async (req: AuthenticatedRequest, res: Response) => {
   }
 
   const prisma = getPrisma(req);
-  const task = await prisma.task.findUnique({ where: { id: taskId } });
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    include: { project: { select: { id: true, archivedAt: true } } },
+  });
 
   if (!task) {
     res.status(404).json({ error: "Task not found" });
+    return;
+  }
+
+  if (task.project.archivedAt) {
+    res.status(409).json({ error: ARCHIVED_PROJECT_WORKSPACE_ERROR });
     return;
   }
 
@@ -708,5 +789,6 @@ router.use("/review-decisions", reviewDecisionsRouter);
 router.use("/picture-lock", pictureLockRouter);
 router.use("/video-comments", videoCommentsRouter);
 router.use("/master-delivery", masterDeliveryRouter);
+router.use("/project-requests", projectRequestsRouter);
 
 export default router;

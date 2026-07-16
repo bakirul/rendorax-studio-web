@@ -19,6 +19,7 @@ import {
   type AuthenticatedRequest,
 } from "../middleware/requireAuth";
 import { enqueueMediaTranscodeJob } from "../lib/mediaProcessing";
+import { ARCHIVED_PROJECT_WORKSPACE_ERROR } from "../lib/agencyProjectAccess";
 
 const router = Router();
 
@@ -60,7 +61,7 @@ function normalizeFileNameValue(fileName: unknown): string | null {
 
 type ProjectLinkValidationResult =
   | { ok: true; projectId: string }
-  | { ok: false; status: 403 | 400 | 404; error: string };
+  | { ok: false; status: 403 | 400 | 404 | 409; error: string };
 
 async function validateAgencyProjectLink(
   prisma: PrismaClient,
@@ -76,11 +77,19 @@ async function validateAgencyProjectLink(
   const trimmedProjectId = projectId.trim();
   const project = await prisma.agencyProject.findUnique({
     where: { id: trimmedProjectId },
-    select: { id: true, ownerId: true, clientId: true },
+    select: { id: true, ownerId: true, clientId: true, archivedAt: true },
   });
 
   if (!project) {
     return { ok: false, status: 404, error: "Project not found" };
+  }
+
+  if (project.archivedAt) {
+    return {
+      ok: false,
+      status: 409,
+      error: ARCHIVED_PROJECT_WORKSPACE_ERROR,
+    };
   }
 
   if (isClientUser(req)) {
@@ -138,11 +147,19 @@ async function assertCanFilterByAgencyProject(
 
   const project = await prisma.agencyProject.findUnique({
     where: { id: projectId.trim() },
-    select: { id: true, ownerId: true, clientId: true },
+    select: { id: true, ownerId: true, clientId: true, archivedAt: true },
   });
 
   if (!project) {
     return { ok: false, status: 404, error: "Project not found" };
+  }
+
+  if (project.archivedAt) {
+    return {
+      ok: false,
+      status: 409,
+      error: ARCHIVED_PROJECT_WORKSPACE_ERROR,
+    };
   }
 
   if (isClientUser(req)) {

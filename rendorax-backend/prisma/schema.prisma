@@ -164,6 +164,17 @@ enum MasterDeliveryEventType {
   @@schema("public")
 }
 
+/// Pre-project intake status. Proposal / conversion statuses come in later phases.
+enum ProjectRequestStatus {
+  submitted
+  needs_clarification
+  under_review
+  approved
+  rejected
+
+  @@schema("public")
+}
+
 enum MasterDeliveryDownloadEventType {
   access_granted
 
@@ -176,6 +187,8 @@ model User {
   email          String          @unique
   displayName    String?
   role           AgencyRole      @default(editor)
+  /// Editor staffing metadata only — not an auth role. Null for clients/admins/legacy editors.
+  specialization String?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   assignedTasks          Task[]
@@ -185,7 +198,49 @@ model User {
   pictureLockEvents      PictureLockEvent[]
   masterDeliveryEvents   MasterDeliveryEvent[]
   masterDeliveryDownloadEvents MasterDeliveryDownloadEvent[]
+  primaryContactOrganization ClientOrganization?
+  submittedProjectRequests   ProjectRequest[]
 
+  @@schema("public")
+}
+
+/// Minimal Phase 1 org: one per Client primary contact. Multi-member comes later.
+model ClientOrganization {
+  id                   String           @id @default(uuid())
+  name                 String
+  primaryContactUserId String           @unique
+  primaryContact       User             @relation(fields: [primaryContactUserId], references: [id], onDelete: Restrict)
+  projectRequests      ProjectRequest[]
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  @@index([name])
+  @@schema("public")
+}
+
+/// Pre-project brief intake. Does not create AgencyProject.
+model ProjectRequest {
+  id                String               @id @default(uuid())
+  organizationId    String
+  submittedByUserId String
+  title             String
+  projectType       String
+  description       String
+  referenceLinks    String?
+  deadlineAt        DateTime?
+  deliverables      String
+  budgetRange       String?
+  status            ProjectRequestStatus @default(submitted)
+  adminNote         String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  organization ClientOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  submittedBy  User               @relation(fields: [submittedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, createdAt])
+  @@index([status, createdAt])
+  @@index([submittedByUserId])
   @@schema("public")
 }
 

@@ -15,6 +15,9 @@ build/
 !.env.example
 !**/.env.example
 
+# Local Demo Workspace seed manifest (may contain project/user IDs)
+scripts/.demo-workspace-manifest.local.json
+
 /generated/prisma
 
 # Temporary scripts

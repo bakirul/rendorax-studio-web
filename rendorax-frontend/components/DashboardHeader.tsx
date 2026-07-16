@@ -2,6 +2,7 @@
 "use client";
 import React, { useState, useRef } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
 import { useRouter } from "next/navigation";
 import AppearanceSettings from "./dashboard/AppearanceSettings";
@@ -149,6 +150,29 @@ export default function DashboardHeader({
           )}
 
           <LiveSessionToolbar />
+
+          <Link
+            href="/guide"
+            className="text-[11px] uppercase tracking-widest border border-white/10 bg-[#1c1c24] text-white hover:bg-[#d4af37]/10 hover:border-[#d4af37]/40 px-4 py-2 transition-colors flex items-center gap-2 rounded-md shadow-sm"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <circle cx="12" cy="12" r="10" />
+              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+            <span className="hidden sm:inline">Help</span>
+          </Link>
 
           <button
             onClick={() => setIsAppearanceOpen(!isAppearanceOpen)}

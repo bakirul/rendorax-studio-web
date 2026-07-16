@@ -21,7 +21,18 @@ import ProjectFeedbackSummary from "@/components/admin/ProjectFeedbackSummary";
 import AdminAssetGallery from "@/components/admin/AdminAssetGallery";
 import AdminReviewViewer from "@/components/admin/AdminReviewViewer";
 import OperationsQueue from "@/components/admin/OperationsQueue";
+import RequestInbox from "@/components/admin/RequestInbox";
 import type { OperationsQueueItem } from "@/utils/operationsQueue";
+import {
+  excludeDemoWorkspaceProjects,
+  isDemoWorkspaceProjectId,
+} from "@/utils/demoWorkspace";
+import {
+  DEFAULT_EDITOR_SPECIALIZATION,
+  EDITOR_SPECIALIZATIONS,
+  formatAssigneeOptionLabel,
+  formatTeamMemberLabel,
+} from "@/utils/editorSpecializations";
 import GalleryViewModeToggle from "@/components/dashboard/GalleryViewModeToggle";
 import type { GalleryViewMode } from "@/hooks/useGalleryViewStyles";
 import { Eye, EyeOff } from "lucide-react";
@@ -217,17 +228,15 @@ function getProjectClientLabel(
 }
 
 function getAssigneeLabel(
-  assignee: { displayName?: string | null; email?: string | null } | null | undefined,
+  assignee: {
+    displayName?: string | null;
+    email?: string | null;
+    role?: string | null;
+    specialization?: string | null;
+  } | null | undefined,
 ): string {
   if (!assignee) return "Unassigned";
-
-  const displayName = assignee.displayName?.trim();
-  if (displayName) return displayName;
-
-  const email = assignee.email?.trim();
-  if (email) return email;
-
-  return "Unassigned";
+  return formatTeamMemberLabel(assignee);
 }
 
 export default function AdminPortal() {
@@ -287,14 +296,22 @@ export default function AdminPortal() {
     null,
   );
   const [agencyUsers, setAgencyUsers] = useState<any[]>([]);
-  const [showClientForm, setShowClientForm] = useState(false);
+  const [showUserForm, setShowUserForm] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [clientSearchQuery, setClientSearchQuery] = useState("");
   const [clientFilter, setClientFilter] = useState<"all" | "active" | "legacy">("all");
-  const [newClient, setNewClient] = useState({
+  const [newUser, setNewUser] = useState<{
+    role: "client" | "editor";
+    displayName: string;
+    email: string;
+    password: string;
+    specialization: string;
+  }>({
+    role: "client",
     displayName: "",
     email: "",
     password: "",
+    specialization: DEFAULT_EDITOR_SPECIALIZATION,
   });
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [newProject, setNewProject] = useState({
@@ -397,46 +414,60 @@ export default function AdminPortal() {
     }
   };
 
-  const handleCreateClient = async (e: React.FormEvent) => {
+  const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (
-      !newClient.displayName.trim() ||
-      !newClient.email.trim() ||
-      !newClient.password
+      !newUser.displayName.trim() ||
+      !newUser.email.trim() ||
+      !newUser.password
     ) {
       return;
     }
-    setActionLoading("create_client");
+    const roleLabel = newUser.role === "editor" ? "Editor" : "Client";
+    setActionLoading("create_user");
 
     try {
       const res = await fetch("/api/agency/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          displayName: newClient.displayName.trim(),
-          email: newClient.email.trim(),
-          password: newClient.password,
+          displayName: newUser.displayName.trim(),
+          email: newUser.email.trim(),
+          password: newUser.password,
+          role: newUser.role,
+          ...(newUser.role === "editor"
+            ? { specialization: newUser.specialization }
+            : {}),
         }),
       });
 
       if (res.ok) {
         setMessage({
           type: "success",
-          text: "Client created successfully.",
+          text: `${roleLabel} created successfully.`,
         });
-        setShowClientForm(false);
+        setShowUserForm(false);
         setShowPassword(false);
-        setNewClient({ displayName: "", email: "", password: "" });
+        setNewUser({
+          role: "client",
+          displayName: "",
+          email: "",
+          password: "",
+          specialization: DEFAULT_EDITOR_SPECIALIZATION,
+        });
         await loadUsers();
       } else {
         const err = await res.json().catch(() => ({}));
         setMessage({
           type: "error",
-          text: err.error || "Failed to create client.",
+          text: err.error || `Failed to create ${roleLabel.toLowerCase()}.`,
         });
       }
     } catch {
-      setMessage({ type: "error", text: "Failed to create client." });
+      setMessage({
+        type: "error",
+        text: `Failed to create ${roleLabel.toLowerCase()}.`,
+      });
     }
 
     setActionLoading(null);
@@ -980,8 +1011,20 @@ export default function AdminPortal() {
     };
   }, [businessClients, unassignedUploaders, clientSearchQuery, clientFilter]);
   const openTasksCount = useMemo(
-    () => tasks.filter((task: any) => task.status !== "done").length,
+    () =>
+      tasks.filter((task: any) => {
+        if (task.status === "done") return false;
+        const projectId =
+          (typeof task.projectId === "string" && task.projectId) ||
+          (typeof task.project?.id === "string" && task.project.id) ||
+          "";
+        return !isDemoWorkspaceProjectId(projectId);
+      }).length,
     [tasks],
+  );
+  const operationalProjects = useMemo(
+    () => excludeDemoWorkspaceProjects(projects),
+    [projects],
   );
   const clientProjectsForSelected = useMemo(() => {
     if (!selectedClient) return [];
@@ -1211,7 +1254,7 @@ export default function AdminPortal() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
           <div className="bg-bg-panel border border-white/5 p-4">
             <p className="text-[10px] uppercase tracking-widest text-text-gray mb-1">Projects</p>
-            <p className="text-2xl font-display text-text-white">{projectsLoading ? "—" : projects.length}</p>
+            <p className="text-2xl font-display text-text-white">{projectsLoading ? "—" : operationalProjects.length}</p>
           </div>
           <div className="bg-bg-panel border border-white/5 p-4">
             <p className="text-[10px] uppercase tracking-widest text-text-gray mb-1">Clients</p>
@@ -1224,6 +1267,19 @@ export default function AdminPortal() {
           <div className="bg-bg-panel border border-white/5 p-4">
             <p className="text-[10px] uppercase tracking-widest text-text-gray mb-1">Team Members</p>
             <p className="text-2xl font-display text-text-white">{editorUsers.length || "—"}</p>
+            {editorUsers.length > 0 ? (
+              <ul className="mt-3 space-y-1.5 max-h-28 overflow-y-auto">
+                {editorUsers.map((u: any) => (
+                  <li
+                    key={u.id}
+                    className="text-[11px] text-text-gray truncate"
+                    title={formatTeamMemberLabel(u)}
+                  >
+                    {formatTeamMemberLabel(u)}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </div>
           <div className="bg-bg-panel border border-white/5 p-4">
             <p className="text-[10px] uppercase tracking-widest text-text-gray mb-1">Open Tasks</p>
@@ -1254,22 +1310,88 @@ export default function AdminPortal() {
                 <button
                   type="button"
                   onClick={() => {
-                    if (showClientForm) setShowPassword(false);
-                    setShowClientForm(!showClientForm);
+                    if (showUserForm) setShowPassword(false);
+                    setShowUserForm(!showUserForm);
                   }}
                   className="text-[10px] bg-gold-primary/10 text-gold-primary border border-gold-primary/30 px-2.5 py-1 uppercase tracking-widest hover:bg-gold-primary hover:text-black transition-colors shrink-0"
                 >
-                  {showClientForm ? "Cancel" : "+ Add Client"}
+                  {showUserForm ? "Cancel" : "+ Create User"}
                 </button>
               </div>
 
-              {showClientForm && (
+              {showUserForm && (
                 <form
-                  onSubmit={handleCreateClient}
+                  onSubmit={handleCreateUser}
                   autoComplete="off"
                   className="mb-4 bg-bg-body p-4 border border-white/5"
                 >
+                  <p className="text-[10px] uppercase tracking-widest text-gold-primary mb-3">
+                    Create User
+                  </p>
                   <div className="space-y-3">
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-widest text-text-gray mb-2">
+                        Role *
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setNewUser({ ...newUser, role: "client" })
+                          }
+                          className={`text-[10px] uppercase tracking-widest py-2 border transition-colors ${
+                            newUser.role === "client"
+                              ? "border-gold-primary bg-gold-primary/15 text-gold-primary"
+                              : "border-white/10 text-text-gray hover:border-white/25 hover:text-white"
+                          }`}
+                        >
+                          Client
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setNewUser({
+                              ...newUser,
+                              role: "editor",
+                              specialization:
+                                newUser.specialization ||
+                                DEFAULT_EDITOR_SPECIALIZATION,
+                            })
+                          }
+                          className={`text-[10px] uppercase tracking-widest py-2 border transition-colors ${
+                            newUser.role === "editor"
+                              ? "border-gold-primary bg-gold-primary/15 text-gold-primary"
+                              : "border-white/10 text-text-gray hover:border-white/25 hover:text-white"
+                          }`}
+                        >
+                          Editor
+                        </button>
+                      </div>
+                    </div>
+                    {newUser.role === "editor" ? (
+                      <div>
+                        <label className="block text-[10px] uppercase tracking-widest text-text-gray mb-2">
+                          Specialization *
+                        </label>
+                        <select
+                          required
+                          value={newUser.specialization}
+                          onChange={(e) =>
+                            setNewUser({
+                              ...newUser,
+                              specialization: e.target.value,
+                            })
+                          }
+                          className="w-full bg-bg-panel border border-white/10 p-2.5 text-sm text-white focus:border-gold-primary outline-none"
+                        >
+                          {EDITOR_SPECIALIZATIONS.map((spec) => (
+                            <option key={spec} value={spec}>
+                              {spec}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : null}
                     <div>
                       <label className="block text-[10px] uppercase tracking-widest text-text-gray mb-2">
                         Full Name *
@@ -1277,10 +1399,14 @@ export default function AdminPortal() {
                       <input
                         required
                         type="text"
-                        placeholder="Client full name"
-                        value={newClient.displayName}
+                        placeholder={
+                          newUser.role === "editor"
+                            ? "Editor full name"
+                            : "Client full name"
+                        }
+                        value={newUser.displayName}
                         onChange={(e) =>
-                          setNewClient({ ...newClient, displayName: e.target.value })
+                          setNewUser({ ...newUser, displayName: e.target.value })
                         }
                         className="w-full bg-bg-panel border border-white/10 p-2.5 text-sm text-white focus:border-gold-primary outline-none"
                       />
@@ -1293,17 +1419,21 @@ export default function AdminPortal() {
                         required
                         type="email"
                         autoComplete="new-password"
-                        placeholder="client@company.com"
-                        value={newClient.email}
+                        placeholder={
+                          newUser.role === "editor"
+                            ? "editor@studio.com"
+                            : "client@company.com"
+                        }
+                        value={newUser.email}
                         onChange={(e) =>
-                          setNewClient({ ...newClient, email: e.target.value })
+                          setNewUser({ ...newUser, email: e.target.value })
                         }
                         className="w-full bg-bg-panel border border-white/10 p-2.5 text-sm text-white focus:border-gold-primary outline-none"
                       />
                     </div>
                     <div>
                       <label className="block text-[10px] uppercase tracking-widest text-text-gray mb-2">
-                        Password *
+                        Temporary Password *
                       </label>
                       <div className="relative">
                         <input
@@ -1311,10 +1441,14 @@ export default function AdminPortal() {
                           type={showPassword ? "text" : "password"}
                           autoComplete="new-password"
                           minLength={6}
-                          placeholder="Temporary client password"
-                          value={newClient.password}
+                          placeholder={
+                            newUser.role === "editor"
+                              ? "Temporary editor password"
+                              : "Temporary client password"
+                          }
+                          value={newUser.password}
                           onChange={(e) =>
-                            setNewClient({ ...newClient, password: e.target.value })
+                            setNewUser({ ...newUser, password: e.target.value })
                           }
                           className="w-full bg-bg-panel border border-white/10 p-2.5 pr-10 text-sm text-white focus:border-gold-primary outline-none"
                         />
@@ -1335,10 +1469,14 @@ export default function AdminPortal() {
                   </div>
                   <button
                     type="submit"
-                    disabled={actionLoading === "create_client"}
+                    disabled={actionLoading === "create_user"}
                     className="w-full mt-4 bg-gold-primary text-black text-xs font-bold uppercase tracking-widest py-2.5 hover:bg-white transition-colors disabled:opacity-50"
                   >
-                    Create Client
+                    {actionLoading === "create_user"
+                      ? "Creating…"
+                      : newUser.role === "editor"
+                        ? "Create Editor"
+                        : "Create Client"}
                   </button>
                 </form>
               )}
@@ -1402,7 +1540,10 @@ export default function AdminPortal() {
                   </p>
                   <button
                     type="button"
-                    onClick={() => setShowClientForm(true)}
+                    onClick={() => {
+                      setNewUser((prev) => ({ ...prev, role: "client" }));
+                      setShowUserForm(true);
+                    }}
                     className="text-[10px] bg-gold-primary/10 text-gold-primary border border-gold-primary/30 px-3 py-1.5 uppercase tracking-widest hover:bg-gold-primary hover:text-black transition-colors"
                   >
                     + Add Client
@@ -1434,12 +1575,14 @@ export default function AdminPortal() {
                       </p>
                       <button
                         type="button"
-                        onClick={() => setShowClientForm(true)}
+                        onClick={() => {
+                          setNewUser((prev) => ({ ...prev, role: "client" }));
+                          setShowUserForm(true);
+                        }}
                         className="text-[10px] bg-gold-primary/10 text-gold-primary border border-gold-primary/30 px-3 py-1.5 uppercase tracking-widest hover:bg-gold-primary hover:text-black transition-colors"
                       >
                         + Add Client
-                      </button>
-                    </>
+                      </button>                    </>
                   ) : (
                     <>
                       <p className="text-text-gray text-xs">No unassigned / legacy assets.</p>
@@ -1540,6 +1683,8 @@ export default function AdminPortal() {
                 void handleQueueNavigate(item);
               }}
             />
+
+            <RequestInbox />
 
             {/* ═══════ SECTION: Projects ═══════ */}
             <section id="admin-projects-section">
@@ -1811,7 +1956,7 @@ export default function AdminPortal() {
                                       <option value="">Select team member</option>
                                       {editorUsers.map((u: any) => (
                                         <option key={u.id} value={u.id}>
-                                          {u.displayName || u.email}
+                                          {formatAssigneeOptionLabel(u)}
                                         </option>
                                       ))}
                                     </select>

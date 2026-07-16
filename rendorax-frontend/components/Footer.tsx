@@ -25,6 +25,12 @@ export default function Footer() {
         {/* Center Side: Public & Legal Links */}
         <div className="flex flex-wrap justify-center gap-6 md:gap-8 text-[11px] uppercase tracking-[0.2em] font-medium">
           <Link
+            href="/guide"
+            className="text-text-gray hover:text-gold-primary transition-colors"
+          >
+            Guide
+          </Link>
+          <Link
             href="/career"
             className="text-text-gray hover:text-gold-primary transition-colors"
           >

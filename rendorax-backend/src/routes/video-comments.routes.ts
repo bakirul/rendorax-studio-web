@@ -5,6 +5,10 @@ import {
   requireAuth,
   type AuthenticatedRequest,
 } from "../middleware/requireAuth";
+import {
+  ARCHIVED_PROJECT_WORKSPACE_ERROR,
+  assertActiveAgencyProjectAccess,
+} from "../lib/agencyProjectAccess";
 
 const router = Router();
 
@@ -34,55 +38,17 @@ function isAdminRole(role: string | undefined): boolean {
   return role === "admin";
 }
 
-function isClientRole(role: string | undefined): boolean {
-  return role === "client";
-}
-
-type ProjectAccessResult =
-  | { ok: true; projectId: string }
-  | { ok: false; status: 403 | 404; error: string };
-
-async function assertProjectAccess(
+async function resolveCommentProjectId(
   prisma: PrismaClient,
-  req: AuthenticatedRequest,
-  projectId: string,
-): Promise<ProjectAccessResult> {
-  const actorId = req.user?.id;
-  if (!actorId) {
-    return { ok: false, status: 403, error: "Unauthorized" };
-  }
-
-  const project = await prisma.agencyProject.findUnique({
-    where: { id: projectId.trim() },
-    select: { id: true, ownerId: true, clientId: true },
+  comment: VideoCommentRow,
+): Promise<string | null> {
+  if (comment.agency_project_id) return comment.agency_project_id;
+  if (!comment.media_asset_id) return null;
+  const asset = await prisma.mediaAsset.findUnique({
+    where: { id: comment.media_asset_id },
+    select: { agencyProjectId: true },
   });
-
-  if (!project) {
-    return { ok: false, status: 404, error: "Project not found" };
-  }
-
-  if (isClientRole(req.user?.role)) {
-    if (project.clientId !== actorId) {
-      return { ok: false, status: 403, error: "Forbidden" };
-    }
-    return { ok: true, projectId: project.id };
-  }
-
-  if (isAdminRole(req.user?.role)) {
-    return { ok: true, projectId: project.id };
-  }
-
-  const isProjectOwner = project.ownerId === actorId;
-  const assignedTask = await prisma.task.findFirst({
-    where: { assigneeId: actorId, projectId: project.id },
-    select: { id: true },
-  });
-
-  if (!isProjectOwner && !assignedTask) {
-    return { ok: false, status: 403, error: "Forbidden" };
-  }
-
-  return { ok: true, projectId: project.id };
+  return asset?.agencyProjectId ?? null;
 }
 
 async function canResolveComment(
@@ -97,28 +63,10 @@ async function canResolveComment(
 
   if (isAdminRole(req.user?.role)) return true;
 
-  if (comment.agency_project_id) {
-    const access = await assertProjectAccess(
-      prisma,
-      req,
-      comment.agency_project_id,
-    );
+  const projectId = await resolveCommentProjectId(prisma, comment);
+  if (projectId) {
+    const access = await assertActiveAgencyProjectAccess(prisma, req, projectId);
     return access.ok;
-  }
-
-  if (comment.media_asset_id) {
-    const asset = await prisma.mediaAsset.findUnique({
-      where: { id: comment.media_asset_id },
-      select: { agencyProjectId: true },
-    });
-    if (asset?.agencyProjectId) {
-      const access = await assertProjectAccess(
-        prisma,
-        req,
-        asset.agencyProjectId,
-      );
-      return access.ok;
-    }
   }
 
   return false;
@@ -144,12 +92,23 @@ router.get("/summary", async (req: AuthenticatedRequest, res: Response) => {
     }
 
     const allowed: string[] = [];
+    let archivedOnlyFailures = 0;
+    let otherFailures = 0;
     for (const projectId of projectIds) {
-      const access = await assertProjectAccess(prisma, req, projectId);
-      if (access.ok) allowed.push(access.projectId);
+      const access = await assertActiveAgencyProjectAccess(prisma, req, projectId);
+      if (access.ok) {
+        allowed.push(access.projectId);
+      } else if (access.status === 409) {
+        archivedOnlyFailures += 1;
+      } else {
+        otherFailures += 1;
+      }
     }
 
     if (allowed.length === 0) {
+      if (archivedOnlyFailures > 0 && otherFailures === 0) {
+        return res.status(409).json({ error: ARCHIVED_PROJECT_WORKSPACE_ERROR });
+      }
       return res.status(403).json({ error: "Forbidden" });
     }
 
@@ -233,6 +192,14 @@ router.patch("/:id/resolve", async (req: AuthenticatedRequest, res: Response) =>
     const comment = existing[0];
     if (!comment) {
       return res.status(404).json({ error: "Comment not found" });
+    }
+
+    const projectId = await resolveCommentProjectId(prisma, comment);
+    if (projectId) {
+      const access = await assertActiveAgencyProjectAccess(prisma, req, projectId);
+      if (!access.ok) {
+        return res.status(access.status).json({ error: access.error });
+      }
     }
 
     const allowed = await canResolveComment(prisma, req, comment);

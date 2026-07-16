@@ -34,6 +34,7 @@ import {
   type OperationalTaskLike,
   type ProjectOperationalStatusKind,
 } from "@/utils/projectOperationalStatus";
+import { excludeDemoWorkspaceProjects } from "@/utils/demoWorkspace";
 
 type QueueTask = OperationalTaskLike & {
   projectId?: string | null;
@@ -148,7 +149,9 @@ export default function OperationsQueue({
     const load = async () => {
       setLoading(true);
 
-      if (projects.length === 0) {
+      const queueProjects = excludeDemoWorkspaceProjects(projects);
+
+      if (queueProjects.length === 0) {
         if (cancelled || generation !== loadGenerationRef.current) return;
         setBuckets(emptyOperationsQueueBuckets());
         setFailedCount(0);
@@ -156,7 +159,7 @@ export default function OperationsQueue({
         return;
       }
 
-      const projectIds = projects.map((project) => project.id);
+      const projectIds = queueProjects.map((project) => project.id);
 
       let feedbackMap: ProjectFeedbackSummaryMap = {};
       try {
@@ -168,7 +171,7 @@ export default function OperationsQueue({
       if (cancelled || generation !== loadGenerationRef.current) return;
 
       const results = await mapWithConcurrency(
-        projects,
+        queueProjects,
         QUEUE_FETCH_CONCURRENCY,
         async (project) =>
           evaluateProject(project, tasksForProject(tasks, project.id), feedbackMap),

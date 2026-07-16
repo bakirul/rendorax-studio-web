@@ -44,6 +44,7 @@ import MasterDeliveryBar, {
   type PendingMasterDeliveryRegister,
 } from "@/components/dashboard/MasterDeliveryBar";
 import ClientMasterDeliveryPanel from "@/components/dashboard/ClientMasterDeliveryPanel";
+import ClientProjectRequests from "@/components/dashboard/ClientProjectRequests";
 import MasterDeliveryUploadModal from "@/components/modals/MasterDeliveryUploadModal";
 import {
   createMasterDeliveryEvent,
@@ -2256,6 +2257,8 @@ export default function DashboardPage() {
           </div>
         ) : null}
       </div>
+
+      {!isEditor ? <ClientProjectRequests /> : null}
 
       {isEditor && (
         <div className="shrink-0 bg-[#0a0a0f] border-b border-white/5 relative z-10">
