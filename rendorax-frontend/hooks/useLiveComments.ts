@@ -454,7 +454,15 @@ export const useLiveComments = (
     };
 
     if (assetId) insertPayload.media_asset_id = assetId;
-    if (agencyProjectId) insertPayload.agency_project_id = agencyProjectId;
+    if (agencyProjectId) {
+      insertPayload.agency_project_id = agencyProjectId;
+    } else {
+      console.error(
+        "Comment blocked: agency_project_id is required for org-scoped RLS",
+      );
+      setNewComment(commentTextToSend);
+      return;
+    }
 
     const { data, error } = await supabase
       .from("video_comments")

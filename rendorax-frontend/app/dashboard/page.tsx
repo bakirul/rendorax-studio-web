@@ -45,7 +45,12 @@ import MasterDeliveryBar, {
 } from "@/components/dashboard/MasterDeliveryBar";
 import ClientMasterDeliveryPanel from "@/components/dashboard/ClientMasterDeliveryPanel";
 import ClientProjectRequests from "@/components/dashboard/ClientProjectRequests";
+import OrganizationTeam from "@/components/dashboard/OrganizationTeam";
 import MasterDeliveryUploadModal from "@/components/modals/MasterDeliveryUploadModal";
+import {
+  fetchClientOrganization,
+  type OrgCapabilities,
+} from "@/utils/clientOrganization";
 import {
   createMasterDeliveryEvent,
   fetchMasterDelivery,
@@ -426,6 +431,8 @@ export default function DashboardPage() {
   const [clientProjectsError, setClientProjectsError] = useState<string | null>(
     null,
   );
+  const [orgCapabilities, setOrgCapabilities] =
+    useState<OrgCapabilities | null>(null);
 
   const loadClientProjects = useCallback(async () => {
     setClientProjectsLoading(true);
@@ -467,6 +474,16 @@ export default function DashboardPage() {
     if (loading || isEditor || !user) return;
     void loadClientProjects();
   }, [loading, isEditor, user, loadClientProjects]);
+
+  useEffect(() => {
+    if (loading || isEditor || !user) {
+      setOrgCapabilities(null);
+      return;
+    }
+    void fetchClientOrganization()
+      .then((org) => setOrgCapabilities(org.currentMember?.capabilities ?? null))
+      .catch(() => setOrgCapabilities(null));
+  }, [loading, isEditor, user]);
 
   useEffect(() => {
     if (isEditor || clientProjectsLoading) return;
@@ -2113,6 +2130,23 @@ export default function DashboardPage() {
     return "client";
   }, [user]);
 
+  const clientCanComment =
+    isEditor ||
+    user?.app_metadata?.role === "admin" ||
+    orgCapabilities?.comment !== false;
+  const clientCanApproveReview =
+    isEditor ||
+    user?.app_metadata?.role === "admin" ||
+    orgCapabilities?.approveReview !== false;
+  const clientCanRequestRevision =
+    isEditor ||
+    user?.app_metadata?.role === "admin" ||
+    orgCapabilities?.revisionRequest !== false;
+  const clientCanDownloadMaster =
+    isEditor ||
+    user?.app_metadata?.role === "admin" ||
+    orgCapabilities?.downloadMaster !== false;
+
   const renderCompareSelect = () => (
     <select
       onChange={handleSelectCompare}
@@ -2258,6 +2292,7 @@ export default function DashboardPage() {
         ) : null}
       </div>
 
+      {!isEditor ? <OrganizationTeam /> : null}
       {!isEditor ? <ClientProjectRequests /> : null}
 
       {isEditor && (
@@ -2472,7 +2507,12 @@ export default function DashboardPage() {
               />
               <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col min-h-0">
                 <CommentsPanel
-                  disabled={false}
+                  disabled={!clientCanComment}
+                  disabledPlaceholder={
+                    !clientCanComment
+                      ? "Your organization role cannot leave comments."
+                      : undefined
+                  }
                   isLive={isLive}
                   playbackUrl={previewPlaybackUrl}
                   comments={comments}
@@ -2712,6 +2752,7 @@ export default function DashboardPage() {
                             onViewInPlayer={handleMasterDeliveryPreview}
                             resolvePreviewAsset={resolveCloudAssetForPreview}
                             activePreviewAssetId={previewFile?.assetId ?? null}
+                            allowDownload={clientCanDownloadMaster}
                           />
                         ) : (
                           <>
@@ -2864,6 +2905,10 @@ export default function DashboardPage() {
                               key={`decision-${previewReviewAsset.id}`}
                               mediaAssetId={previewReviewAsset.id}
                               viewerRole={reviewDecisionViewerRole}
+                              clientCanApprove={clientCanApproveReview}
+                              clientCanRequestRevision={
+                                clientCanRequestRevision
+                              }
                             />
                             <PictureLockBar
                               key={`lock-${previewReviewAsset.id}`}
@@ -3262,7 +3307,14 @@ export default function DashboardPage() {
                       />
                       <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col min-h-0">
                         <CommentsPanel
-                          disabled={playerControlsDisabled}
+                          disabled={
+                            playerControlsDisabled || !clientCanComment
+                          }
+                          disabledPlaceholder={
+                            !clientCanComment
+                              ? "Your organization role cannot leave comments."
+                              : undefined
+                          }
                           isLive={isLive}
                           playbackUrl={previewPlaybackUrl}
                           comments={comments}

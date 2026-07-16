@@ -8,20 +8,26 @@ export const metadata: Metadata = {
 };
 
 const STEP_DETAIL: Record<(typeof WORKFLOW_STEPS)[number], string> = {
+  "Client Organization":
+    "Each Primary Client has a Client Organization. Primary Contact is bootstrapped as an active member.",
+  "Invite Review Team":
+    "Primary Contact invites Reviewers, Stakeholders, Approvers, and Observers by email. Invitees accept at /access/invite and join the existing Client Dashboard.",
   "Project Request":
-    "Authenticated Clients submit a brief (title, type, deliverables, deadline, references) from the Dashboard. This is pre-project — no Agency Project is created yet.",
-  "Admin Review":
-    "Admin opens Request Inbox, reviews the brief, starts review, or asks for clarification with a note.",
-  Approval:
-    "Admin approves or rejects the request. Proposal / Client approval and conversion to Agency Project come in later phases.",
-  Project:
-    "Admin creates an Agency Project (today manually; later from an approved request), sets brief fields, phase, client, and owners.",
-  Assignment: "Admin assigns Editors via Tasks on the Project.",
-  Work: "Editors upload and organize Project assets and Review Versions (03_REVIEW).",
-  Feedback:
-    "Clients leave timed comments and Approve or request Revision on Review Versions.",
+    "Authorized members submit a brief from the Dashboard. This is pre-project — no Agency Project yet.",
+  Proposal:
+    "Admin creates a versioned Proposal (cost, timeline, deliverables) and sends it. Request becomes Quoted; sent content is immutable.",
+  "Client Approval":
+    "Primary Contact or Approver approves, requests changes, or rejects the Proposal. Only Client approval sets the Request to Approved.",
+  "Project Creation":
+    "Admin converts an approved request into an Agency Project (Awaiting Assets). The request becomes Converted; the project appears in Admin HQ, Client Dashboard, and Operations Queue.",
+  Assignment:
+    "Admin assigns Editors via Tasks on the production project.",
+  Production:
+    "Editors upload Project assets and Review Versions (03_REVIEW).",
+  Review:
+    "Organization members leave timed comments and Approve or request Revision according to their membership role.",
   Delivery:
-    "After Picture Lock when needed, Editors create Master Delivery (05_MASTER_DELIVERY). Clients download; Access Granted is recorded.",
+    "After Picture Lock when needed, Editors create Master Delivery. Primary Contact and Approver may download; Access Granted is recorded.",
   Archive:
     "Admin archives finished Projects. Active lists and workspace APIs exclude them; Restore brings them back.",
 };
@@ -30,8 +36,8 @@ export default function WorkflowGuidePage() {
   return (
     <GuideArticle
       eyebrow="Workflow Guide"
-      title="One path from Request to Archive."
-      description="Intake starts with Project Request; production still runs on Agency Project → Assignment → Work → Feedback → Delivery → Archive."
+      title="One path from Organization to Archive."
+      description="Client Organization → Invite → Request → Proposal → Client Approval → Project Creation → Assignment → Production → Review → Delivery → Archive."
       nextHref="/guide/faq"
       nextLabel="FAQ"
     >
@@ -60,23 +66,23 @@ export default function WorkflowGuidePage() {
       <section>
         <h2 className="text-white font-display text-xl mb-3">Continue by role</h2>
         <div className="flex flex-wrap gap-4 text-sm">
-          <Link href="/guide/demo" className="text-gold-primary hover:text-white">
-            Try Demo Workspace →
+          <Link
+            href="/guide/client/invite-team"
+            className="text-gold-primary hover:text-white"
+          >
+            Invite team →
           </Link>
           <Link
             href="/guide/client/project-request"
             className="text-gold-primary hover:text-white"
           >
-            Client Guide →
-          </Link>
-          <Link href="/guide/editor/tasks" className="text-gold-primary hover:text-white">
-            Editor Guide →
+            Client Request →
           </Link>
           <Link
-            href="/guide/admin/project-requests"
+            href="/guide/admin/convert-request"
             className="text-gold-primary hover:text-white"
           >
-            Admin Guide →
+            Convert to Project →
           </Link>
         </div>
       </section>

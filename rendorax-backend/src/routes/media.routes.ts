@@ -20,6 +20,10 @@ import {
 } from "../middleware/requireAuth";
 import { enqueueMediaTranscodeJob } from "../lib/mediaProcessing";
 import { ARCHIVED_PROJECT_WORKSPACE_ERROR } from "../lib/agencyProjectAccess";
+import {
+  clientCanAccessProjectClientId,
+  getAccessibleClientIdsForMember,
+} from "../lib/clientOrganizationMembers";
 
 const router = Router();
 
@@ -163,7 +167,12 @@ async function assertCanFilterByAgencyProject(
   }
 
   if (isClientUser(req)) {
-    if (project.clientId !== actorId) {
+    const allowed = await clientCanAccessProjectClientId(
+      prisma,
+      actorId,
+      project.clientId,
+    );
+    if (!allowed) {
       return { ok: false, status: 403, error: "Forbidden" };
     }
     return { ok: true, projectId: project.id };
@@ -487,14 +496,17 @@ router.get("/assets", async (req: AuthenticatedRequest, res: Response) => {
     let where: Prisma.MediaAssetWhereInput;
 
     if (isClientUser(req)) {
-      // Clients see (A) deliverables linked to their projects and (B) their own
-      // unlinked staging uploads before a project exists. Other clients' assets,
-      // unrelated projects, and editor-owned unlinked assets stay excluded.
+      const clientIds = await getAccessibleClientIdsForMember(
+        prisma,
+        authenticatedUserId!,
+      );
+      // Clients see (A) deliverables linked to their org projects and (B) their own
+      // unlinked staging uploads before a project exists.
       where = {
         OR: [
           {
             agencyProjectId: { not: null },
-            agencyProject: { clientId: authenticatedUserId },
+            agencyProject: { clientId: { in: clientIds } },
           },
           {
             userId: authenticatedUserId,

@@ -20,16 +20,18 @@ const REFERENCE_LINKS_MAX = 5000;
 const BUDGET_RANGE_MAX = 200;
 const ADMIN_NOTE_MAX = 5000;
 
-/** Phase 1 allowed status transitions. Terminal: approved, rejected. */
+/** Phase 2: Admin cannot set approved — that comes from Client Proposal approval. */
 export const PROJECT_REQUEST_TRANSITIONS: Record<
   ProjectRequestStatus,
   readonly ProjectRequestStatus[]
 > = {
   submitted: ["under_review", "needs_clarification", "rejected"],
-  under_review: ["needs_clarification", "approved", "rejected"],
+  under_review: ["needs_clarification", "rejected"],
   needs_clarification: ["under_review", "rejected"],
+  quoted: ["under_review", "rejected"],
   approved: [],
   rejected: [],
+  converted_to_project: [],
 };
 
 export function canTransitionProjectRequestStatus(
@@ -177,8 +179,10 @@ export const PROJECT_REQUEST_STATUS_VALUES = new Set<string>([
   "submitted",
   "needs_clarification",
   "under_review",
+  "quoted",
   "approved",
   "rejected",
+  "converted_to_project",
 ]);
 
 export function isProjectRequestStatus(

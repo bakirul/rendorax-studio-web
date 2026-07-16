@@ -24,6 +24,7 @@ interface CommentsPanelProps {
   playbackUrl?: string | null;
   isLive?: boolean;
   disabled?: boolean;
+  disabledPlaceholder?: string;
 }
 
 function formatResolvedMeta(comment: VideoCommentRow): string | null {
@@ -55,6 +56,7 @@ export default function CommentsPanel({
   playbackUrl,
   isLive = false,
   disabled = false,
+  disabledPlaceholder,
 }: CommentsPanelProps) {
   const [filter, setFilter] = useState<CommentFilter>("all");
 
@@ -251,7 +253,8 @@ export default function CommentsPanel({
             onChange={(e) => setNewComment(e.target.value)}
             placeholder={
               disabled
-                ? "Select a video to leave a comment..."
+                ? disabledPlaceholder ||
+                  "Select a video to leave a comment..."
                 : "Leave a comment..."
             }
             rows={2}

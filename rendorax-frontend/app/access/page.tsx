@@ -118,6 +118,14 @@ export default function AccessPage() {
               disabled={loading}
               placeholder="••••••••"
             />
+            <p className="mt-3 text-right">
+              <Link
+                href="/forgot-password"
+                className="text-[10px] uppercase tracking-widest text-gold-primary hover:text-white"
+              >
+                Forgot Password?
+              </Link>
+            </p>
           </div>
 
           <button

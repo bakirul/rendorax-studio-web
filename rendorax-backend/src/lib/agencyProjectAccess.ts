@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import type { AuthenticatedRequest } from "../middleware/requireAuth";
+import { clientCanAccessProjectClientId } from "./clientOrganizationMembers";
 
 export const ARCHIVED_PROJECT_WORKSPACE_ERROR =
   "This project is archived and cannot be used as an active workspace.";
@@ -27,6 +28,7 @@ export type AssertAgencyProjectAccessOptions = {
 /**
  * Role-scoped project access for active workspace APIs.
  * Rejects archived projects with 409 unless allowArchived is set.
+ * Clients: canonical clientId OR active org member of that primary contact.
  */
 export async function assertAgencyProjectAccess(
   prisma: PrismaClient,
@@ -62,7 +64,12 @@ export async function assertAgencyProjectAccess(
   }
 
   if (isClientRole(req.user?.role)) {
-    if (project.clientId !== actorId) {
+    const allowed = await clientCanAccessProjectClientId(
+      prisma,
+      actorId,
+      project.clientId,
+    );
+    if (!allowed) {
       return { ok: false, status: 403, error: "Forbidden" };
     }
     return { ok: true, projectId: project.id };

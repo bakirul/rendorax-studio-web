@@ -4,14 +4,25 @@ import { useCallback, useEffect, useState } from "react";
 import {
   fetchProjectRequest,
   formatProjectRequestDate,
+  formatProposalCurrency,
   getProjectRequestStatusClass,
   getProjectRequestStatusLabel,
+  getProposalStatusClass,
+  getProposalStatusLabel,
   listProjectRequests,
+  listProposals,
   PROJECT_REQUEST_TYPES,
+  respondToProposal,
   submitProjectRequest,
+  type ProjectProposal,
   type ProjectRequestDetail,
   type ProjectRequestSummary,
 } from "@/utils/projectRequests";
+import {
+  fetchClientOrganization,
+  type OrgCapabilities,
+} from "@/utils/clientOrganization";
+import Link from "next/link";
 
 const emptyForm = {
   title: "",
@@ -44,6 +55,13 @@ export default function ClientProjectRequests() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<ProjectRequestDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [proposals, setProposals] = useState<ProjectProposal[]>([]);
+  const [respondNote, setRespondNote] = useState("");
+  const [respondError, setRespondError] = useState<string | null>(null);
+  const [respondLoading, setRespondLoading] = useState<string | null>(null);
+  const [capabilities, setCapabilities] = useState<OrgCapabilities | null>(
+    null,
+  );
 
   const loadRequests = useCallback(async () => {
     setLoading(true);
@@ -63,6 +81,15 @@ export default function ClientProjectRequests() {
     void loadRequests();
   }, [loadRequests]);
 
+  useEffect(() => {
+    void fetchClientOrganization()
+      .then((org) => setCapabilities(org.currentMember?.capabilities ?? null))
+      .catch(() => setCapabilities(null));
+  }, []);
+
+  const canSubmitRequest = capabilities?.submitRequest !== false;
+  const canRespondProposal = capabilities?.respondProposal !== false;
+
   const closeForm = () => {
     setShowForm(false);
     setFormError(null);
@@ -72,13 +99,76 @@ export default function ClientProjectRequests() {
     setSelectedId(id);
     setDetailLoading(true);
     setDetail(null);
+    setProposals([]);
+    setRespondNote("");
+    setRespondError(null);
     try {
       const row = await fetchProjectRequest(id);
       setDetail(row);
+      const props = await listProposals(id);
+      setProposals(props);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load detail");
     } finally {
       setDetailLoading(false);
+    }
+  };
+
+  const activeProposal =
+    proposals.find((p) => p.status === "sent") ??
+    proposals.find((p) => p.status === "approved") ??
+    proposals.find((p) => p.status === "changes_requested") ??
+    proposals.find((p) => p.status === "rejected") ??
+    proposals[0] ??
+    null;
+
+  const handleRespond = async (
+    action: "approve" | "request_changes" | "reject",
+  ) => {
+    if (!detail || !activeProposal || activeProposal.status !== "sent") return;
+
+    if (action === "approve") {
+      if (
+        !window.confirm(
+          "Approve this proposal? Rendorax Admin will convert the request into a production project.",
+        )
+      ) {
+        return;
+      }
+    } else {
+      if (!respondNote.trim()) {
+        setRespondError("A note is required for this action.");
+        return;
+      }
+      const label =
+        action === "request_changes" ? "request changes" : "reject";
+      if (!window.confirm(`Are you sure you want to ${label} this proposal?`)) {
+        return;
+      }
+    }
+
+    setRespondLoading(action);
+    setRespondError(null);
+    try {
+      const result = await respondToProposal(detail.id, activeProposal.id, {
+        action,
+        note: respondNote.trim() || undefined,
+      });
+      setDetail(result.request);
+      setProposals(await listProposals(detail.id));
+      setRespondNote("");
+      setSuccessMessage(
+        action === "approve"
+          ? "Proposal approved. Rendorax Admin will convert this into a production project."
+          : action === "request_changes"
+            ? "Changes requested. Rendorax will revise the proposal."
+            : "Proposal rejected.",
+      );
+      await loadRequests();
+    } catch (err) {
+      setRespondError(err instanceof Error ? err.message : "Response failed");
+    } finally {
+      setRespondLoading(null);
     }
   };
 
@@ -145,7 +235,7 @@ export default function ClientProjectRequests() {
             <polyline points="6 9 12 15 18 9" />
           </svg>
         </button>
-        {!showForm ? (
+        {!showForm && canSubmitRequest ? (
           <button
             type="button"
             onClick={() => {
@@ -391,8 +481,9 @@ export default function ClientProjectRequests() {
                   No project requests yet.
                 </p>
                 <p className="text-[10px] text-gray-500">
-                  Submit a request with your brief, deliverables, deadline, and
-                  references.
+                  {canSubmitRequest
+                    ? "Submit a request with your brief, deliverables, deadline, and references."
+                    : "Your role can view organization requests. Ask Primary Contact, Stakeholder, or Approver to submit."}
                 </p>
               </div>
             ) : null
@@ -453,6 +544,21 @@ export default function ClientProjectRequests() {
                       {getProjectRequestStatusLabel(detail.status)}
                     </span>
                   </div>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-gray-500">
+                    <span>
+                      Organization:{" "}
+                      <span className="text-gray-300">
+                        {detail.organization.name}
+                      </span>
+                    </span>
+                    <span>
+                      Submitted by:{" "}
+                      <span className="text-gray-300">
+                        {detail.submittedBy.displayName ||
+                          detail.submittedBy.email}
+                      </span>
+                    </span>
+                  </div>
                   {detail.status === "needs_clarification" && detail.adminNote ? (
                     <div className="border border-amber-400/30 bg-amber-400/10 px-3 py-2">
                       <p className="text-[9px] uppercase tracking-widest text-amber-300 mb-1">
@@ -465,10 +571,171 @@ export default function ClientProjectRequests() {
                   ) : null}
                   {detail.status === "approved" ? (
                     <p className="text-[11px] text-emerald-400/90 border border-emerald-400/20 bg-emerald-400/5 px-3 py-2">
-                      Approved request. Project conversion will be available in
-                      the next phase.
+                      Proposal approved. Rendorax will convert this request into
+                      a production project.
                     </p>
                   ) : null}
+                  {detail.status === "converted_to_project" ? (
+                    <div className="space-y-2 border border-emerald-400/30 bg-emerald-400/10 px-3 py-3">
+                      <p className="text-[11px] text-emerald-300 font-medium">
+                        Project Created
+                      </p>
+                      <p className="text-sm text-white">
+                        {detail.convertedAgencyProject?.title || detail.title}
+                      </p>
+                      <p className="text-[10px] text-gray-500 uppercase tracking-widest">
+                        Current phase:{" "}
+                        <span className="text-gray-200 normal-case tracking-normal">
+                          {detail.convertedAgencyProject?.status || "—"}
+                        </span>
+                      </p>
+                      <Link
+                        href="/dashboard"
+                        className="inline-block text-[10px] uppercase tracking-widest text-[#d4af37] hover:text-white"
+                      >
+                        Open Project →
+                      </Link>
+                    </div>
+                  ) : null}
+
+                  {activeProposal ? (
+                    <div className="border border-white/10 bg-[#0a0a0f] p-3 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-[10px] uppercase tracking-widest text-[#d4af37]">
+                          Proposal V{activeProposal.version}
+                        </span>
+                        <span
+                          className={`text-[9px] uppercase tracking-widest px-2 py-0.5 border ${getProposalStatusClass(activeProposal.status)}`}
+                        >
+                          {getProposalStatusLabel(activeProposal.status)}
+                        </span>
+                      </div>
+                      <p>
+                        <span className="text-[9px] uppercase tracking-widest text-gray-500 block mb-1">
+                          Estimated cost
+                        </span>
+                        {formatProposalCurrency(
+                          activeProposal.estimatedCostCents,
+                          activeProposal.currency,
+                        )}
+                      </p>
+                      <p>
+                        <span className="text-[9px] uppercase tracking-widest text-gray-500 block mb-1">
+                          Timeline
+                        </span>
+                        <span className="whitespace-pre-wrap">
+                          {activeProposal.timelineText}
+                        </span>
+                      </p>
+                      <p>
+                        <span className="text-[9px] uppercase tracking-widest text-gray-500 block mb-1">
+                          Deliverables
+                        </span>
+                        <span className="whitespace-pre-wrap">
+                          {activeProposal.deliverablesText}
+                        </span>
+                      </p>
+                      {activeProposal.notes ? (
+                        <p>
+                          <span className="text-[9px] uppercase tracking-widest text-gray-500 block mb-1">
+                            Notes
+                          </span>
+                          <span className="whitespace-pre-wrap">
+                            {activeProposal.notes}
+                          </span>
+                        </p>
+                      ) : null}
+                      {activeProposal.termsText ? (
+                        <p>
+                          <span className="text-[9px] uppercase tracking-widest text-gray-500 block mb-1">
+                            Terms
+                          </span>
+                          <span className="whitespace-pre-wrap">
+                            {activeProposal.termsText}
+                          </span>
+                        </p>
+                      ) : null}
+
+                      {activeProposal.status === "approved" &&
+                      activeProposal.approvedBy ? (
+                        <p className="text-[10px] text-gray-500">
+                          Proposal approved by{" "}
+                          <span className="text-gray-300">
+                            {activeProposal.approvedBy.displayName ||
+                              activeProposal.approvedBy.email}
+                          </span>
+                        </p>
+                      ) : null}
+
+                      {activeProposal.status === "sent" &&
+                      canRespondProposal ? (
+                        <div className="space-y-2 pt-2 border-t border-white/5">
+                          <label className="block text-[9px] uppercase tracking-widest text-gray-500">
+                            Note (required for changes / reject)
+                          </label>
+                          <textarea
+                            rows={2}
+                            value={respondNote}
+                            onChange={(e) => setRespondNote(e.target.value)}
+                            disabled={respondLoading !== null}
+                            className="w-full bg-[#121217] border border-white/10 p-2 text-sm text-white outline-none focus:border-[#d4af37]/50 disabled:opacity-50 resize-y"
+                          />
+                          {respondError ? (
+                            <p className="text-[10px] text-red-400">
+                              {respondError}
+                            </p>
+                          ) : null}
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              disabled={respondLoading !== null}
+                              onClick={() => void handleRespond("approve")}
+                              className="text-[10px] uppercase tracking-widest px-3 py-2 border border-emerald-400/40 text-emerald-400 hover:bg-emerald-400/10 disabled:opacity-50"
+                            >
+                              {respondLoading === "approve"
+                                ? "Saving…"
+                                : "Approve Proposal"}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={respondLoading !== null}
+                              onClick={() =>
+                                void handleRespond("request_changes")
+                              }
+                              className="text-[10px] uppercase tracking-widest px-3 py-2 border border-amber-400/40 text-amber-300 hover:bg-amber-400/10 disabled:opacity-50"
+                            >
+                              {respondLoading === "request_changes"
+                                ? "Saving…"
+                                : "Request Changes"}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={respondLoading !== null}
+                              onClick={() => void handleRespond("reject")}
+                              className="text-[10px] uppercase tracking-widest px-3 py-2 border border-red-500/40 text-red-400 hover:bg-red-500/10 disabled:opacity-50"
+                            >
+                              {respondLoading === "reject"
+                                ? "Saving…"
+                                : "Reject Proposal"}
+                            </button>
+                          </div>
+                        </div>
+                      ) : activeProposal.status === "sent" &&
+                        !canRespondProposal ? (
+                        <p className="text-[11px] text-gray-500 border border-white/5 px-3 py-2">
+                          You can view this proposal. Only Primary Contact or
+                          Approver can respond.
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : detail.status === "quoted" ||
+                    detail.status === "under_review" ? (
+                    <p className="text-[11px] text-gray-500 border border-white/5 px-3 py-2">
+                      No proposal available yet. Rendorax will send one after
+                      review.
+                    </p>
+                  ) : null}
+
                   <p>
                     <span className="text-[9px] uppercase tracking-widest text-gray-500 block mb-1">
                       Type
@@ -525,6 +792,7 @@ export default function ClientProjectRequests() {
                     onClick={() => {
                       setSelectedId(null);
                       setDetail(null);
+                      setProposals([]);
                     }}
                     className="text-[9px] uppercase tracking-widest text-gray-500 hover:text-white"
                   >

@@ -15,6 +15,7 @@ import uploadRouter from "./src/routes/upload.routes";
 import mediaRouter from "./src/routes/media.routes";
 import storageRouter from "./src/routes/storage.routes";
 import agencyRouter from "./src/routes/agency.routes";
+import clientOrganizationInvitePublicRouter from "./src/routes/client-organization-invite-public.routes";
 import { requireAuth } from "./src/middleware/requireAuth";
 import { startMediaTranscodeWorker } from "./src/workers/mediaTranscodeWorker";
 
@@ -390,6 +391,10 @@ io.on("connection", (socket) => {
 app.use("/api/upload", uploadRouter);
 app.use("/api/media", mediaRouter);
 app.use("/api/storage", storageRouter);
+app.use(
+  "/api/agency/client-organization/invitations/accept",
+  clientOrganizationInvitePublicRouter,
+);
 app.use("/api/agency", agencyRouter);
 
 // Health Check

@@ -14,6 +14,7 @@ export const GUIDE_NAV: GuideNavGroup[] = [
     items: [
       { href: "/guide", label: "Guide Center" },
       { href: "/guide/getting-started", label: "Getting Started" },
+      { href: "/guide/pilot-qa", label: "Pilot QA Runbook" },
       { href: "/guide/demo", label: "Demo Workspace" },
       { href: "/guide/workflow", label: "Workflow Guide" },
       { href: "/guide/faq", label: "FAQ" },
@@ -22,7 +23,11 @@ export const GUIDE_NAV: GuideNavGroup[] = [
   {
     title: "Client",
     items: [
+      { href: "/guide/client/invite-team", label: "Invite Reviewers & Approvers" },
+      { href: "/guide/client/member-roles", label: "Member Roles & Permissions" },
+      { href: "/guide/client/accept-invite", label: "Accept an Invitation" },
       { href: "/guide/client/project-request", label: "Submit a Project Request" },
+      { href: "/guide/client/proposal", label: "Review and Approve Proposal" },
       { href: "/guide/client/upload", label: "Upload Assets" },
       { href: "/guide/client/review-comments", label: "Review & Comments" },
       { href: "/guide/client/approve-revision", label: "Approve / Revision" },
@@ -42,6 +47,12 @@ export const GUIDE_NAV: GuideNavGroup[] = [
     title: "Admin",
     items: [
       { href: "/guide/admin/project-requests", label: "Review Project Requests" },
+      { href: "/guide/admin/proposal", label: "Create and Send Proposal" },
+      { href: "/guide/admin/convert-request", label: "Convert Request to Project" },
+      {
+        href: "/guide/admin/organization-membership",
+        label: "Organization Membership Support",
+      },
       { href: "/guide/admin/clients-projects", label: "Clients & Projects" },
       { href: "/guide/admin/operations-queue", label: "Operations Queue" },
       { href: "/guide/admin/delivery-tracking", label: "Delivery Tracking" },
@@ -51,13 +62,15 @@ export const GUIDE_NAV: GuideNavGroup[] = [
 ];
 
 export const WORKFLOW_STEPS = [
+  "Client Organization",
+  "Invite Review Team",
   "Project Request",
-  "Admin Review",
-  "Approval",
-  "Project",
+  "Proposal",
+  "Client Approval",
+  "Project Creation",
   "Assignment",
-  "Work",
-  "Feedback",
+  "Production",
+  "Review",
   "Delivery",
   "Archive",
 ] as const;

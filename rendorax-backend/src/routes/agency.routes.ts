@@ -7,6 +7,7 @@ import {
 } from "../middleware/requireAuth";
 import { ensureAgencyUser, mapSupabaseRoleToAgencyRole } from "../lib/agencyUsers";
 import { ARCHIVED_PROJECT_WORKSPACE_ERROR } from "../lib/agencyProjectAccess";
+import { getAccessibleClientIdsForMember } from "../lib/clientOrganizationMembers";
 import { resolveEditorSpecialization } from "../lib/editorSpecializations";
 import { getSupabaseAdminClient } from "../lib/supabaseAdmin";
 import reviewDecisionsRouter from "./review-decisions.routes";
@@ -14,6 +15,7 @@ import videoCommentsRouter from "./video-comments.routes";
 import pictureLockRouter from "./picture-lock.routes";
 import masterDeliveryRouter from "./master-delivery.routes";
 import projectRequestsRouter from "./project-requests.routes";
+import clientOrganizationRouter from "./client-organization.routes";
 
 const router = Router();
 
@@ -81,7 +83,8 @@ router.get("/projects", async (req: AuthenticatedRequest, res: Response) => {
   if (role === "admin") {
     where = {};
   } else if (role === "client") {
-    where = { clientId: actor.id };
+    const clientIds = await getAccessibleClientIdsForMember(prisma, actor.id);
+    where = { clientId: { in: clientIds } };
   } else {
     where = { ownerId: actor.id };
   }
@@ -688,13 +691,14 @@ router.get("/tasks", async (req: AuthenticatedRequest, res: Response) => {
   if (role === "admin") {
     where = { project: { archivedAt: null } };
   } else if (role === "client") {
+    const clientIds = await getAccessibleClientIdsForMember(prisma, actor.id);
     where = {
       AND: [
         { project: { archivedAt: null } },
         {
           OR: [
             { assigneeId: actor.id },
-            { project: { clientId: actor.id } },
+            { project: { clientId: { in: clientIds } } },
           ],
         },
       ],
@@ -790,5 +794,6 @@ router.use("/picture-lock", pictureLockRouter);
 router.use("/video-comments", videoCommentsRouter);
 router.use("/master-delivery", masterDeliveryRouter);
 router.use("/project-requests", projectRequestsRouter);
+router.use("/client-organization", clientOrganizationRouter);
 
 export default router;

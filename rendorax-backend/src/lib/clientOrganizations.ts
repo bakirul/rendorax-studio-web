@@ -1,4 +1,5 @@
 import type { PrismaClient, User } from "@prisma/client";
+import { ensurePrimaryContactMembership } from "./clientOrganizationMembers";
 
 function organizationNameForClient(user: User): string {
   const display = user.displayName?.trim();
@@ -11,31 +12,34 @@ function organizationNameForClient(user: User): string {
 }
 
 /**
- * Phase 1 bootstrap: one ClientOrganization per Client primary contact.
- * Not a multi-member org system.
+ * One ClientOrganization per Client primary contact.
+ * Also ensures an active primary_contact membership row.
  */
 export async function ensureClientOrganizationForPrimaryContact(
   prisma: PrismaClient,
   user: User,
 ) {
-  const existing = await prisma.clientOrganization.findUnique({
+  let organization = await prisma.clientOrganization.findUnique({
     where: { primaryContactUserId: user.id },
   });
-  if (existing) return existing;
 
-  try {
-    return await prisma.clientOrganization.create({
-      data: {
-        name: organizationNameForClient(user),
-        primaryContactUserId: user.id,
-      },
-    });
-  } catch (error) {
-    // Concurrent first access: another request may have created it.
-    const raced = await prisma.clientOrganization.findUnique({
-      where: { primaryContactUserId: user.id },
-    });
-    if (raced) return raced;
-    throw error;
+  if (!organization) {
+    try {
+      organization = await prisma.clientOrganization.create({
+        data: {
+          name: organizationNameForClient(user),
+          primaryContactUserId: user.id,
+        },
+      });
+    } catch (error) {
+      const raced = await prisma.clientOrganization.findUnique({
+        where: { primaryContactUserId: user.id },
+      });
+      if (!raced) throw error;
+      organization = raced;
+    }
   }
+
+  await ensurePrimaryContactMembership(prisma, organization.id, user);
+  return organization;
 }

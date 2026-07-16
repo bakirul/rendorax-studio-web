@@ -164,13 +164,44 @@ enum MasterDeliveryEventType {
   @@schema("public")
 }
 
-/// Pre-project intake status. Proposal / conversion statuses come in later phases.
+/// Pre-project intake status. Approval comes from Client Proposal accept (Phase 2).
+/// Conversion to AgencyProject is Phase 4 (Admin only).
 enum ProjectRequestStatus {
   submitted
   needs_clarification
   under_review
+  quoted
   approved
   rejected
+  converted_to_project
+
+  @@schema("public")
+}
+
+enum ProjectProposalStatus {
+  draft
+  sent
+  changes_requested
+  approved
+  rejected
+
+  @@schema("public")
+}
+
+enum ClientOrganizationRole {
+  primary_contact
+  reviewer
+  stakeholder
+  approver
+  observer
+
+  @@schema("public")
+}
+
+enum ClientOrganizationMemberStatus {
+  invited
+  active
+  removed
 
   @@schema("public")
 }
@@ -200,17 +231,25 @@ model User {
   masterDeliveryDownloadEvents MasterDeliveryDownloadEvent[]
   primaryContactOrganization ClientOrganization?
   submittedProjectRequests   ProjectRequest[]
+  proposalsCreated           ProjectProposal[] @relation("ProposalCreatedBy")
+  proposalsApproved          ProjectProposal[] @relation("ProposalApprovedBy")
+  convertedProjectRequests   ProjectRequest[]  @relation("ProjectRequestConvertedBy")
+  organizationMemberships    ClientOrganizationMember[] @relation("ClientOrganizationMemberUser")
+  organizationInvitesSent    ClientOrganizationMember[] @relation("ClientOrganizationMemberInvitedBy")
+  organizationInvitationsCreated ClientOrganizationInvitation[]
 
   @@schema("public")
 }
 
-/// Minimal Phase 1 org: one per Client primary contact. Multi-member comes later.
+/// Client organization. primaryContactUserId remains canonical for AgencyProject.clientId.
 model ClientOrganization {
   id                   String           @id @default(uuid())
   name                 String
   primaryContactUserId String           @unique
   primaryContact       User             @relation(fields: [primaryContactUserId], references: [id], onDelete: Restrict)
   projectRequests      ProjectRequest[]
+  members              ClientOrganizationMember[]
+  invitations          ClientOrganizationInvitation[]
   createdAt            DateTime         @default(now())
   updatedAt            DateTime         @updatedAt
 
@@ -218,29 +257,111 @@ model ClientOrganization {
   @@schema("public")
 }
 
-/// Pre-project brief intake. Does not create AgencyProject.
-model ProjectRequest {
-  id                String               @id @default(uuid())
-  organizationId    String
-  submittedByUserId String
-  title             String
-  projectType       String
-  description       String
-  referenceLinks    String?
-  deadlineAt        DateTime?
-  deliverables      String
-  budgetRange       String?
-  status            ProjectRequestStatus @default(submitted)
-  adminNote         String?
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
+model ClientOrganizationMember {
+  id              String                         @id @default(uuid())
+  organizationId  String
+  userId          String?
+  email           String
+  displayName     String?
+  role            ClientOrganizationRole
+  status          ClientOrganizationMemberStatus @default(invited)
+  invitedByUserId String
+  invitedAt       DateTime                       @default(now())
+  acceptedAt      DateTime?
+  removedAt       DateTime?
+  createdAt       DateTime                       @default(now())
+  updatedAt       DateTime                       @updatedAt
 
   organization ClientOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  submittedBy  User               @relation(fields: [submittedByUserId], references: [id], onDelete: Restrict)
+  user         User?              @relation("ClientOrganizationMemberUser", fields: [userId], references: [id], onDelete: SetNull)
+  invitedBy    User               @relation("ClientOrganizationMemberInvitedBy", fields: [invitedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, email])
+  @@index([userId])
+  @@index([organizationId, status])
+  @@schema("public")
+}
+
+/// Single-use invite. Raw token is never stored — only tokenHash.
+model ClientOrganizationInvitation {
+  id              String                 @id @default(uuid())
+  organizationId  String
+  invitedByUserId String
+  email           String
+  displayName     String?
+  role            ClientOrganizationRole
+  tokenHash       String                 @unique
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  revokedAt       DateTime?
+  createdAt       DateTime               @default(now())
+
+  organization ClientOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invitedBy    User               @relation(fields: [invitedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, email])
+  @@index([expiresAt])
+  @@schema("public")
+}
+
+/// Pre-project brief intake. Converted to AgencyProject only via Admin convert (Phase 4).
+model ProjectRequest {
+  id                       String               @id @default(uuid())
+  organizationId           String
+  submittedByUserId        String
+  title                    String
+  projectType              String
+  description              String
+  referenceLinks           String?
+  deadlineAt               DateTime?
+  deliverables             String
+  budgetRange              String?
+  status                   ProjectRequestStatus @default(submitted)
+  adminNote                String?
+  convertedAgencyProjectId String?              @unique
+  convertedAt              DateTime?
+  convertedByUserId        String?
+  createdAt                DateTime             @default(now())
+  updatedAt                DateTime             @updatedAt
+
+  organization           ClientOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  submittedBy            User               @relation(fields: [submittedByUserId], references: [id], onDelete: Restrict)
+  proposals              ProjectProposal[]
+  convertedAgencyProject AgencyProject?     @relation("ProjectRequestConvertedProject", fields: [convertedAgencyProjectId], references: [id], onDelete: SetNull)
+  convertedBy            User?              @relation("ProjectRequestConvertedBy", fields: [convertedByUserId], references: [id], onDelete: SetNull)
 
   @@index([organizationId, createdAt])
   @@index([status, createdAt])
   @@index([submittedByUserId])
+  @@index([convertedByUserId])
+  @@schema("public")
+}
+
+/// Versioned commercial proposal for a Project Request. Does not create AgencyProject.
+model ProjectProposal {
+  id                 String                @id @default(uuid())
+  requestId          String
+  createdByUserId    String
+  approvedByUserId   String?
+  version            Int                   @default(1)
+  estimatedCostCents Int
+  currency           String                @default("USD")
+  timelineText       String
+  deliverablesText   String
+  notes              String?
+  termsText          String?
+  status             ProjectProposalStatus @default(draft)
+  sentAt             DateTime?
+  respondedAt        DateTime?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  request    ProjectRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  createdBy  User           @relation("ProposalCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  approvedBy User?          @relation("ProposalApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([requestId, version])
+  @@index([requestId, status])
   @@schema("public")
 }
 
@@ -266,6 +387,7 @@ model AgencyProject {
   pictureLockEvents      PictureLockEvent[]
   masterDeliveryEvents   MasterDeliveryEvent[]
   masterDeliveryDownloadEvents MasterDeliveryDownloadEvent[]
+  convertedFromRequest   ProjectRequest? @relation("ProjectRequestConvertedProject")
 
   @@index([ownerId])
   @@index([clientId])

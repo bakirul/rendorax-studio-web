@@ -17,6 +17,9 @@ export type ReviewDecisionViewerRole = "client" | "editor" | "admin";
 interface ReviewDecisionBarProps {
   mediaAssetId: string;
   viewerRole: ReviewDecisionViewerRole;
+  /** When viewerRole is client, gates Approve / Revision from org membership. */
+  clientCanApprove?: boolean;
+  clientCanRequestRevision?: boolean;
 }
 
 function statusBadgeClass(status: ReviewDecisionStatus | null | undefined): string {
@@ -37,6 +40,8 @@ function statusBadgeClass(status: ReviewDecisionStatus | null | undefined): stri
 export default function ReviewDecisionBar({
   mediaAssetId,
   viewerRole,
+  clientCanApprove = true,
+  clientCanRequestRevision = true,
 }: ReviewDecisionBarProps) {
   const [latest, setLatest] = useState<ReviewDecision | null>(null);
   const [history, setHistory] = useState<ReviewDecision[]>([]);
@@ -215,28 +220,41 @@ export default function ReviewDecisionBar({
           ) : null}
         </div>
 
-        {viewerRole === "client" ? (
+        {viewerRole === "client" &&
+        (clientCanApprove || clientCanRequestRevision) ? (
           <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <button
-              type="button"
-              disabled={submitting || loading}
-              onClick={() => void handleCreate("approved")}
-              className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-emerald-200 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Approve Version
-            </button>
-            <button
-              type="button"
-              disabled={submitting || loading}
-              onClick={() => {
-                setRevisionOpen((open) => !open);
-                setActionError(null);
-              }}
-              className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-amber-200 transition hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Request Revision
-            </button>
+            {clientCanApprove ? (
+              <button
+                type="button"
+                disabled={submitting || loading}
+                onClick={() => void handleCreate("approved")}
+                className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-emerald-200 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Approve Version
+              </button>
+            ) : null}
+            {clientCanRequestRevision ? (
+              <button
+                type="button"
+                disabled={submitting || loading}
+                onClick={() => {
+                  setRevisionOpen((open) => !open);
+                  setActionError(null);
+                }}
+                className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-amber-200 transition hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Request Revision
+              </button>
+            ) : null}
           </div>
+        ) : null}
+
+        {viewerRole === "client" &&
+        !clientCanApprove &&
+        !clientCanRequestRevision ? (
+          <p className="text-[11px] text-gray-500 shrink-0">
+            View-only — your role cannot submit review decisions.
+          </p>
         ) : null}
 
         {editorAction ? (
@@ -253,7 +271,9 @@ export default function ReviewDecisionBar({
         ) : null}
       </div>
 
-      {viewerRole === "client" && revisionOpen ? (
+      {viewerRole === "client" &&
+      clientCanRequestRevision &&
+      revisionOpen ? (
         <div className="mt-3 rounded-lg border border-white/10 bg-black/30 p-3">
           <label className="mb-2 block text-[10px] font-bold uppercase tracking-wide text-gray-400">
             Revision note

@@ -13,9 +13,9 @@ export default function ClientProjectRequestGuidePage() {
     <GuideArticle
       eyebrow="Client · Project Request"
       title="Submit a Project Request."
-      description="Before production starts, send your brief through Project Requests. Admin reviews it — this does not create an Agency Project yet."
-      nextHref="/guide/client/upload"
-      nextLabel="Upload Assets"
+      description="Before production starts, send your brief through Project Requests. Admin reviews it — submitting does not create an Agency Project."
+      nextHref="/guide/client/proposal"
+      nextLabel="Review and Approve Proposal"
     >
       <GuideSteps
         steps={[
@@ -23,13 +23,12 @@ export default function ClientProjectRequestGuidePage() {
           "Open the Project Requests section near the top of the workspace.",
           "Click New Project Request and fill title, type, brief, deliverables, deadline, and references.",
           "Submit. Status starts as Submitted.",
-          "Watch status updates: Under Review, Needs Clarification (with Admin note), Approved, or Rejected.",
+          "Watch status: Under Review → Quoted → Approved → Project Created (after Admin converts).",
         ]}
       />
       <GuideNote>
-        Approval does not create a project in this phase. Project conversion comes
-        after Proposal / Approval in a later release. You cannot create an Agency
-        Project yourself.
+        You cannot create an Agency Project yourself. After you approve a
+        Proposal, Admin converts the request into production.
       </GuideNote>
     </GuideArticle>
   );

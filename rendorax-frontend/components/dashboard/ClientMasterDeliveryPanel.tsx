@@ -40,6 +40,8 @@ interface ClientMasterDeliveryPanelProps {
     mediaAssetId: string,
   ) => Promise<MediaAssetRecord | null>;
   activePreviewAssetId?: string | null;
+  /** Organization membership gate for Master download (backend still enforces). */
+  allowDownload?: boolean;
 }
 
 function eventTypeLabel(eventType: MasterDeliveryEvent["eventType"]): string {
@@ -62,6 +64,7 @@ export default function ClientMasterDeliveryPanel({
   onViewInPlayer,
   resolvePreviewAsset,
   activePreviewAssetId = null,
+  allowDownload = true,
 }: ClientMasterDeliveryPanelProps) {
   const {
     viewMode,
@@ -179,7 +182,11 @@ export default function ClientMasterDeliveryPanel({
     };
   }, []);
 
-  const access = resolveMasterDeliveryClientAccess(current);
+  const accessBase = resolveMasterDeliveryClientAccess(current);
+  const access = {
+    ...accessBase,
+    canDownload: allowDownload && accessBase.canDownload,
+  };
   const previewAsset = current?.mediaAssetId
     ? assetById[current.mediaAssetId] ?? null
     : null;

@@ -14,6 +14,10 @@ import {
   mapSupabaseRoleToAgencyRole,
 } from "../lib/agencyUsers";
 import { assertActiveAgencyProjectAccess } from "../lib/agencyProjectAccess";
+import {
+  getClientOrgRoleForProject,
+  orgRoleHasCapability,
+} from "../lib/clientOrganizationMembers";
 import { generatePresignedDownloadUrl } from "../lib/r2";
 
 const router = Router();
@@ -257,6 +261,25 @@ router.get("/download", async (req: AuthenticatedRequest, res: Response) => {
     if (!access.ok) {
       res.status(access.status).json({ error: access.error });
       return;
+    }
+
+    const actorRole = mapSupabaseRoleToAgencyRole(req.user?.role);
+    if (actorRole === "client") {
+      const project = await prisma.agencyProject.findUnique({
+        where: { id: access.projectId },
+        select: { clientId: true },
+      });
+      const orgRole = await getClientOrgRoleForProject(
+        prisma,
+        actor.id,
+        project?.clientId,
+      );
+      if (!orgRole || !orgRoleHasCapability(orgRole, "download_master")) {
+        res.status(403).json({
+          error: "Your organization role cannot download Master Delivery",
+        });
+        return;
+      }
     }
 
     const latest = await prisma.masterDeliveryEvent.findFirst({

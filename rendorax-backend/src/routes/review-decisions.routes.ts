@@ -14,6 +14,10 @@ import {
   mapSupabaseRoleToAgencyRole,
 } from "../lib/agencyUsers";
 import { assertActiveAgencyProjectAccess } from "../lib/agencyProjectAccess";
+import {
+  getClientOrgRoleForProject,
+  orgRoleHasCapability,
+} from "../lib/clientOrganizationMembers";
 
 const router = Router();
 
@@ -255,6 +259,40 @@ router.post("/", async (req: AuthenticatedRequest, res: Response) => {
   if (!access.ok) {
     res.status(access.status).json({ error: access.error });
     return;
+  }
+
+  if (actorRole === "client") {
+    const project = await prisma.agencyProject.findUnique({
+      where: { id: asset.agencyProjectId! },
+      select: { clientId: true },
+    });
+    const orgRole = await getClientOrgRoleForProject(
+      prisma,
+      actor.id,
+      project?.clientId,
+    );
+    if (!orgRole) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+    if (
+      status === "approved" &&
+      !orgRoleHasCapability(orgRole, "approve_review")
+    ) {
+      res.status(403).json({
+        error: "Your organization role cannot approve review versions",
+      });
+      return;
+    }
+    if (
+      status === "revision_requested" &&
+      !orgRoleHasCapability(orgRole, "revision_request")
+    ) {
+      res.status(403).json({
+        error: "Your organization role cannot request revisions",
+      });
+      return;
+    }
   }
 
   try {
