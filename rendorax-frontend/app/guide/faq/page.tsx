@@ -9,6 +9,26 @@ export const metadata: Metadata = {
 
 const FAQS: { q: string; a: ReactNode }[] = [
   {
+    q: "What is Real-Time Collaboration?",
+    a: (
+      <>
+        Rendorax keeps review, feedback, direction, and revision activity
+        connected to the timeline and project workflow instead of spreading
+        communication across email, messaging apps, and separate review tools.
+        Written text chat and direction can be translated automatically.
+        Automatic translation of video calls, spoken language, or voice is not
+        yet verified. See{" "}
+        <Link
+          href="/guide/client/review-comments"
+          className="text-gold-primary hover:text-white"
+        >
+          Review &amp; Comments
+        </Link>{" "}
+        for how clients leave timeline-based feedback.
+      </>
+    ),
+  },
+  {
     q: "What is a Review Version?",
     a: (
       <>

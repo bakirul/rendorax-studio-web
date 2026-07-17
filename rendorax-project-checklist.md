@@ -780,6 +780,11 @@ When assisting with this project, keep these constraints in mind:
 
 | Date | Decision | Rationale |
 |------|----------|-----------|
+| 2026-07-17 | Guide Center docs aligned with homepage Real-Time Collaboration messaging | Documentation-only: `/guide/client/review-comments` pillars + workflow Review link + FAQ; no product/API/homepage changes |
+| 2026-07-17 | Guide collaboration copy corrected for translation boundary | Document verified automatic **text** chat/direction translation only; do not claim automatic video/voice/spoken translation until verified |
+
+| Date | Decision | Rationale |
+|------|----------|-----------|
 | 2026-07-12 | Production verification complete | Commit `34af1c8` deployed (Vercel success); Render backend healthy; operator Admin HQ live QA passed; no deployment issues |
 | 2026-07-12 | Admin HQ UI bundle shipped (`34af1c8`) | Phase 1A polish, Phase 1B client list, Client Overview Card, Open Tasks KPI, USD billing display; frontend-only change to `app/admin/page.tsx`; no backend/schema/API changes |
 | 2026-07-12 | Admin client provisioning complete (`6e37c64`) | Supabase admin user creation, `supabaseAdmin.ts`, `/api/agency/users`, admin UI; production-verified |

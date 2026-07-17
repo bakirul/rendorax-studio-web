@@ -13,6 +13,7 @@ export default function Navbar() {
     { name: "About", path: "/studio" },
     { name: "Work", path: "/portfolio" },
     { name: "Services", path: "/services" },
+    { name: "How It Works", path: "/guide" },
     { name: "Pricing", path: "/pricing" },
     { name: "Journal", path: "/journal" },
     { name: "Contact", path: "/contact" },
@@ -61,7 +62,7 @@ export default function Navbar() {
             bg-bg-body/98 md:bg-transparent border-b border-gold-primary/30 md:border-none
             flex flex-col md:flex-row items-center gap-0 md:gap-6 lg:gap-8
             overflow-hidden transition-all duration-500 ease-in-out backdrop-blur-md md:backdrop-blur-none
-            ${isOpen ? "max-h-[500px] py-8 md:py-0 shadow-2xl" : "max-h-0 md:max-h-full py-0"}
+            ${isOpen ? "max-h-[560px] py-8 md:py-0 shadow-2xl" : "max-h-0 md:max-h-full py-0"}
           `}
         >
           {navLinks.map((item) => {
@@ -91,15 +92,6 @@ export default function Navbar() {
             >
               Client Login
             </Link>
-
-            <a
-              href="https://app.rendorax.com"
-              className="group px-5 py-2.5 border border-gold-primary/40 bg-gold-primary/5 text-gold-primary text-[10px] font-bold uppercase tracking-[0.2em] flex items-center gap-2.5 transition-all duration-500 hover:bg-gold-primary hover:text-black hover:shadow-[0_0_25px_rgba(212,175,55,0.3)] shadow-[0_0_15px_rgba(212,175,55,0.05)] rounded-sm"
-              onClick={() => setIsOpen(false)}
-            >
-              <span className="w-1.5 h-1.5 bg-gold-primary rounded-full animate-pulse group-hover:bg-black group-hover:animate-none"></span>
-              Rendorax Studio
-            </a>
           </div>
         </div>
       </nav>

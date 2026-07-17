@@ -54,6 +54,21 @@ export default function WorkflowGuidePage() {
               <h2 className="font-display text-xl text-white">{step}</h2>
             </div>
             <p>{STEP_DETAIL[step]}</p>
+            {step === "Review" ? (
+              <div className="mt-3 space-y-2">
+                <p>
+                  Feedback, direction, and revision activity stay connected to
+                  the project workflow—not scattered across email or separate
+                  tools.
+                </p>
+                <Link
+                  href="/guide/client/review-comments"
+                  className="inline-block text-sm text-gold-primary hover:text-white transition-colors"
+                >
+                  Learn about review and real-time collaboration →
+                </Link>
+              </div>
+            ) : null}
             {index < WORKFLOW_STEPS.length - 1 ? (
               <p className="mt-3 text-gold-primary/70 text-xs uppercase tracking-widest">
                 ↓

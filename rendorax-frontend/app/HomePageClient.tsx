@@ -243,6 +243,27 @@ export default function HomePageClient() {
             display: block;
             width: 100%;
           }
+          @keyframes heroSubEnter {
+            from {
+              opacity: 0;
+              transform: translateY(10px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+          .hero-sub-enter {
+            opacity: 0;
+            animation: heroSubEnter 0.7s ease-out 0.15s forwards;
+          }
+          @media (prefers-reduced-motion: reduce) {
+            .hero-sub-enter {
+              opacity: 1;
+              transform: none;
+              animation: none;
+            }
+          }
         `,
         }}
       />
@@ -260,7 +281,7 @@ export default function HomePageClient() {
           <h1 className="text-[clamp(2.4rem,5.5vw,4.5rem)] font-display leading-[1.08] mb-6 bg-gradient-to-b from-white to-[#aaa] bg-clip-text text-transparent">
             One accountable path for post-production.
           </h1>
-          <p className="text-base sm:text-lg text-gray-300 font-light leading-relaxed max-w-lg mb-10">
+          <p className="hero-sub-enter text-base sm:text-lg text-gray-300 font-light leading-relaxed max-w-lg mb-10">
             We are a broadcast post-production partner. Request to archive runs
             on our platform—for agencies, networks, OTT, and commercial teams.
           </p>
