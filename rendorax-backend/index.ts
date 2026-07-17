@@ -70,13 +70,205 @@ const socketCallSessions: Record<string, { roomId: string; userId: string }> = {
 // Map: roomId -> targetLang -> WebSocket
 const openAIConnections: Record<string, Record<string, WebSocket>> = {};
 
+/**
+ * Phase 1 review playback host state — ephemeral, single-process only.
+ * Multi-instance deployments need sticky sessions or shared store (not Phase 1).
+ */
+type ReviewRoomMember = {
+  userId?: string;
+  role?: string;
+};
+
+type ReviewPlaybackSnapshot = {
+  currentTime: number;
+  paused: boolean;
+  playbackRate?: number;
+  seq: number;
+  sentAt: number;
+  assetId?: string;
+};
+
+type ReviewRoomState = {
+  hostSocketId?: string;
+  hostUserId?: string;
+  members: Map<string, ReviewRoomMember>;
+  lastPlaybackState?: ReviewPlaybackSnapshot;
+};
+
+const reviewRoomStates = new Map<string, ReviewRoomState>();
+
+function isPlaybackHostCapable(role?: string): boolean {
+  return role === "admin" || role === "editor";
+}
+
+function getReviewRoomState(roomId: string): ReviewRoomState {
+  let state = reviewRoomStates.get(roomId);
+  if (!state) {
+    state = { members: new Map() };
+    reviewRoomStates.set(roomId, state);
+  }
+  return state;
+}
+
+function emitPlaybackHostChanged(roomId: string, state: ReviewRoomState) {
+  io.to(roomId).emit("playback-host-changed", {
+    room: roomId,
+    hostSocketId: state.hostSocketId ?? null,
+  });
+}
+
+/** Keep current host if still present and capable; else first admin/editor by join order. */
+function electPlaybackHost(roomId: string) {
+  const state = reviewRoomStates.get(roomId);
+  if (!state) return;
+
+  if (state.hostSocketId && state.members.has(state.hostSocketId)) {
+    const current = state.members.get(state.hostSocketId);
+    if (isPlaybackHostCapable(current?.role)) {
+      emitPlaybackHostChanged(roomId, state);
+      return;
+    }
+  }
+
+  for (const [socketId, member] of state.members) {
+    if (isPlaybackHostCapable(member.role)) {
+      state.hostSocketId = socketId;
+      state.hostUserId = member.userId;
+      emitPlaybackHostChanged(roomId, state);
+      return;
+    }
+  }
+
+  state.hostSocketId = undefined;
+  state.hostUserId = undefined;
+  emitPlaybackHostChanged(roomId, state);
+}
+
+function leaveReviewRoomMembership(socketId: string, roomId: string) {
+  const state = reviewRoomStates.get(roomId);
+  if (!state) return;
+
+  state.members.delete(socketId);
+  const wasHost = state.hostSocketId === socketId;
+  if (wasHost) {
+    state.hostSocketId = undefined;
+    state.hostUserId = undefined;
+  }
+
+  if (state.members.size === 0) {
+    reviewRoomStates.delete(roomId);
+    return;
+  }
+
+  if (wasHost) {
+    electPlaybackHost(roomId);
+  }
+}
+
+function parseJoinVideoRoomPayload(
+  payload: unknown,
+): { room: string; userId?: string; role?: string } | null {
+  if (typeof payload === "string" && payload.trim()) {
+    return { room: payload.trim() };
+  }
+  if (payload && typeof payload === "object") {
+    const data = payload as { room?: unknown; userId?: unknown; role?: unknown };
+    const room = typeof data.room === "string" ? data.room.trim() : "";
+    if (!room) return null;
+    return {
+      room,
+      userId: typeof data.userId === "string" ? data.userId : undefined,
+      role: typeof data.role === "string" ? data.role : undefined,
+    };
+  }
+  return null;
+}
+
+function isHostTransportAllowed(roomId: string, socketId: string): boolean {
+  const state = reviewRoomStates.get(roomId);
+  return Boolean(state?.hostSocketId && state.hostSocketId === socketId);
+}
+
+function rememberPlaybackState(
+  roomId: string,
+  data: {
+    currentTime?: unknown;
+    paused?: unknown;
+    playbackRate?: unknown;
+    seq?: unknown;
+    sentAt?: unknown;
+    assetId?: unknown;
+  },
+) {
+  const state = getReviewRoomState(roomId);
+  const currentTime =
+    typeof data.currentTime === "number" && Number.isFinite(data.currentTime)
+      ? data.currentTime
+      : 0;
+  const seq =
+    typeof data.seq === "number" && Number.isFinite(data.seq) ? data.seq : 0;
+  const sentAt =
+    typeof data.sentAt === "number" && Number.isFinite(data.sentAt)
+      ? data.sentAt
+      : Date.now();
+  const paused = typeof data.paused === "boolean" ? data.paused : false;
+  const playbackRate =
+    typeof data.playbackRate === "number" && Number.isFinite(data.playbackRate)
+      ? data.playbackRate
+      : undefined;
+  const assetId =
+    typeof data.assetId === "string" && data.assetId.trim()
+      ? data.assetId.trim()
+      : undefined;
+
+  state.lastPlaybackState = {
+    currentTime,
+    paused,
+    ...(playbackRate !== undefined ? { playbackRate } : {}),
+    seq,
+    sentAt,
+    ...(assetId ? { assetId } : {}),
+  };
+}
+
 io.on("connection", (socket) => {
   console.log(`🔌 New client connected: ${socket.id}`);
 
-  // ইউজার কোনো নির্দিষ্ট ভিডিওর রুমে জয়েন করলে
-  socket.on("join-video-room", (room) => {
+  // Review room join — elect host (admin/editor only; first capable wins)
+  socket.on("join-video-room", (payload) => {
+    const parsed = parseJoinVideoRoomPayload(payload);
+    if (!parsed) return;
+
+    const { room, userId, role } = parsed;
     socket.join(room);
-    console.log(`Client joined video room: ${room}`);
+
+    const state = getReviewRoomState(room);
+    const existing = state.members.get(socket.id);
+    state.members.set(socket.id, {
+      userId: userId ?? existing?.userId,
+      role: role ?? existing?.role,
+    });
+
+    if (!state.hostSocketId || !state.members.has(state.hostSocketId)) {
+      electPlaybackHost(room);
+    } else {
+      socket.emit("playback-host-changed", {
+        room,
+        hostSocketId: state.hostSocketId ?? null,
+      });
+    }
+
+    console.log(
+      `Client joined video room: ${room} (role=${role ?? "unknown"}, host=${state.hostSocketId ?? "none"})`,
+    );
+  });
+
+  socket.on("leave-video-room", (data: { room?: string }) => {
+    const room = typeof data?.room === "string" ? data.room.trim() : "";
+    if (!room) return;
+    socket.leave(room);
+    leaveReviewRoomMembership(socket.id, room);
+    console.log(`Client left video room: ${room}`);
   });
 
   // গ্লোবাল লবিতে জয়েন করলে
@@ -90,21 +282,92 @@ io.on("connection", (socket) => {
     console.log(`🌐 Client ${socket.id} set language to ${lang}`);
   });
 
-  // 🔴 ভিডিও প্লে ইভেন্ট ব্রডকাস্ট
-  socket.on("video-play", (data) => {
-    console.log(`▶️ PLAY signal received from front-end for room: ${data.room}`); 
-    socket.to(data.room).emit("video-play", data);
+  // Host-only transport relay (Phase 1)
+  socket.on("video-play", (data: { room?: string; paused?: boolean }) => {
+    const room = typeof data?.room === "string" ? data.room.trim() : "";
+    if (!room || !isHostTransportAllowed(room, socket.id)) return;
+    rememberPlaybackState(room, { ...data, paused: false });
+    console.log(`▶️ PLAY signal from host for room: ${room}`);
+    socket.to(room).emit("video-play", data);
   });
 
-  // 🔴 ভিডিও পজ ইভেন্ট ব্রডকাস্ট
-  socket.on("video-pause", (data) => {
-    socket.to(data.room).emit("video-pause", data);
+  socket.on("video-pause", (data: { room?: string; paused?: boolean }) => {
+    const room = typeof data?.room === "string" ? data.room.trim() : "";
+    if (!room || !isHostTransportAllowed(room, socket.id)) return;
+    rememberPlaybackState(room, { ...data, paused: true });
+    socket.to(room).emit("video-pause", data);
   });
 
-  // 🔴 ভিডিও সিক (টাইম চেঞ্জ) ইভেন্ট ব্রডকাস্ট
-  socket.on("video-seek", (data) => {
-    socket.to(data.room).emit("video-seek", data);
+  socket.on("video-seek", (data: { room?: string; paused?: boolean }) => {
+    const room = typeof data?.room === "string" ? data.room.trim() : "";
+    if (!room || !isHostTransportAllowed(room, socket.id)) return;
+    rememberPlaybackState(room, data);
+    socket.to(room).emit("video-seek", data);
   });
+
+  socket.on("request-playback-state", (data: { room?: string }) => {
+    const room = typeof data?.room === "string" ? data.room.trim() : "";
+    if (!room) return;
+    const state = reviewRoomStates.get(room);
+    if (!state?.hostSocketId) {
+      // No host — followers stay paused; send last snapshot if any
+      if (state?.lastPlaybackState) {
+        socket.emit("playback-state", {
+          room,
+          ...state.lastPlaybackState,
+          paused: true,
+        });
+      }
+      return;
+    }
+    if (state.hostSocketId === socket.id) {
+      if (state.lastPlaybackState) {
+        socket.emit("playback-state", {
+          room,
+          ...state.lastPlaybackState,
+        });
+      }
+      return;
+    }
+    io.to(state.hostSocketId).emit("request-playback-state", {
+      room,
+      requesterSocketId: socket.id,
+    });
+  });
+
+  socket.on(
+    "playback-state",
+    (data: {
+      room?: string;
+      targetSocketId?: string;
+      currentTime?: number;
+      paused?: boolean;
+      playbackRate?: number;
+      seq?: number;
+      sentAt?: number;
+      assetId?: string;
+    }) => {
+      const room = typeof data?.room === "string" ? data.room.trim() : "";
+      if (!room || !isHostTransportAllowed(room, socket.id)) return;
+      rememberPlaybackState(room, data);
+
+      const payload = {
+        room,
+        currentTime: data.currentTime ?? 0,
+        paused: typeof data.paused === "boolean" ? data.paused : true,
+        playbackRate: data.playbackRate,
+        seq: data.seq ?? 0,
+        sentAt: data.sentAt ?? Date.now(),
+        assetId: data.assetId,
+      };
+
+      if (data.targetSocketId) {
+        io.to(data.targetSocketId).emit("playback-state", payload);
+      } else {
+        socket.to(room).emit("playback-state", payload);
+      }
+    },
+  );
 
   // 🔴 নতুন কমেন্ট ব্রডকাস্ট
   socket.on("new-comment", (data) => {
@@ -382,8 +645,16 @@ io.on("connection", (socket) => {
         }
         continue;
       }
+      leaveReviewRoomMembership(socket.id, room);
       io.to(room).emit("timeline-user-disconnected", socket.id);
       io.to(room).emit("user-disconnected", socket.id);
+    }
+
+    // Rooms may already be cleared on disconnect; also scrub membership maps.
+    for (const [roomId, state] of reviewRoomStates) {
+      if (state.members.has(socket.id)) {
+        leaveReviewRoomMembership(socket.id, roomId);
+      }
     }
   });
 });

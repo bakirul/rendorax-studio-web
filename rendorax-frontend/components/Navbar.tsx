@@ -93,7 +93,7 @@ export default function Navbar() {
               className="w-full md:w-auto text-center px-5 py-2.5 border border-gold-primary text-gold-primary text-[10px] font-bold uppercase tracking-[0.2em] transition-all duration-300 hover:bg-gold-primary hover:text-black rounded-sm min-h-[44px] flex items-center justify-center"
               onClick={() => setIsOpen(false)}
             >
-              Client Login
+              Studio Access
             </Link>
           </div>
         </div>

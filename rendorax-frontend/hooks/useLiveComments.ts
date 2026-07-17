@@ -13,8 +13,19 @@ import { translateIncomingChatMessage } from "@/utils/translateLiveChatMessage";
 import { useGlobalStore } from "@/store/useGlobalStore";
 import {
   emitJoinReviewRoom,
+  emitLeaveReviewRoom,
   getReviewRoomId,
 } from "@/utils/reviewRoom";
+import {
+  applyRemotePlayback,
+  buildTransportPayload,
+  getAuthPlaybackRole,
+  isHostCapableRole,
+  isTransportContextMatch,
+  PLAYBACK_DRIFT_TOLERANCE_SEC,
+  shouldAcceptRemoteSeq,
+  type PlaybackTransportPayload,
+} from "@/utils/playbackTransport";
 import {
   buildMarkerRows,
   buildMarkersCsv,
@@ -86,7 +97,17 @@ export const useLiveComments = (
   const [isLive, setIsLive] = useState(false);
   const [isNotifying, setIsNotifying] = useState(false);
   const [notificationSent, setNotificationSent] = useState(false);
+  const [isPlaybackHost, setIsPlaybackHost] = useState(false);
   const activeRoomRef = useRef<string | null>(null);
+  const isApplyingRemoteRef = useRef(false);
+  const localSeqRef = useRef(0);
+  const lastAppliedSeqRef = useRef(0);
+  const isPlaybackHostRef = useRef(false);
+  const socketRef = useRef<Socket | null>(null);
+  const previewFileRef = useRef(previewFile);
+  previewFileRef.current = previewFile;
+  const currentFolderRef = useRef(currentFolder);
+  currentFolderRef.current = currentFolder;
   const translationCacheRef = useRef<
     Map<string, CommentTranslationCacheEntry>
   >(new Map());
@@ -307,7 +328,10 @@ export const useLiveComments = (
   useEffect(() => {
     if (!user?.id) {
       setSocket(null);
+      socketRef.current = null;
       setIsLive(false);
+      setIsPlaybackHost(false);
+      isPlaybackHostRef.current = false;
       return;
     }
 
@@ -315,9 +339,14 @@ export const useLiveComments = (
       process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:4000",
     );
     setSocket(newSocket);
+    socketRef.current = newSocket;
 
     const handleConnect = () => setIsLive(true);
-    const handleDisconnect = () => setIsLive(false);
+    const handleDisconnect = () => {
+      setIsLive(false);
+      setIsPlaybackHost(false);
+      isPlaybackHostRef.current = false;
+    };
     const handleConnectError = (err: Error) => {
       console.warn(
         "⚠️ [useLiveComments] Socket connection failed. Ensure NEXT_PUBLIC_BACKEND_URL is set in production:",
@@ -349,6 +378,10 @@ export const useLiveComments = (
     newSocket.on("comment-updated", handleCommentUpdated);
 
     return () => {
+      const room = activeRoomRef.current;
+      if (room) {
+        emitLeaveReviewRoom(newSocket, room);
+      }
       activeRoomRef.current = null;
       newSocket.off("connect", handleConnect);
       newSocket.off("connect_error", handleConnectError);
@@ -357,72 +390,306 @@ export const useLiveComments = (
       newSocket.off("comment-updated", handleCommentUpdated);
       newSocket.disconnect();
       setSocket(null);
+      socketRef.current = null;
       setIsLive(false);
+      setIsPlaybackHost(false);
+      isPlaybackHostRef.current = false;
     };
   }, [user?.id]);
+
+  const getActiveAssetId = useCallback(() => {
+    const id = previewFileRef.current?.assetId;
+    return typeof id === "string" ? id.trim() : "";
+  }, []);
+
+  const buildHostPayload = useCallback(
+    (overrides: {
+      currentTime: number;
+      paused?: boolean;
+      playbackRate?: number;
+    }): PlaybackTransportPayload | null => {
+      const room = activeRoomRef.current;
+      if (!room) return null;
+      localSeqRef.current += 1;
+      const video = videoRefStable.current.current;
+      return buildTransportPayload({
+        room,
+        assetId: getActiveAssetId() || undefined,
+        currentTime: overrides.currentTime,
+        paused: overrides.paused,
+        playbackRate:
+          overrides.playbackRate ??
+          (video && Number.isFinite(video.playbackRate)
+            ? video.playbackRate
+            : undefined),
+        seq: localSeqRef.current,
+      });
+    },
+    [getActiveAssetId],
+  );
+
+  const emitPlaybackPlay = useCallback(() => {
+    const socket = socketRef.current;
+    const video = videoRefStable.current.current;
+    if (!socket || !video || !isPlaybackHostRef.current || isApplyingRemoteRef.current) {
+      return;
+    }
+    const payload = buildHostPayload({
+      currentTime: video.currentTime,
+      paused: false,
+      playbackRate: video.playbackRate,
+    });
+    if (!payload) return;
+    socket.emit("video-play", payload);
+  }, [buildHostPayload]);
+
+  const emitPlaybackPause = useCallback(() => {
+    const socket = socketRef.current;
+    const video = videoRefStable.current.current;
+    if (!socket || !video || !isPlaybackHostRef.current || isApplyingRemoteRef.current) {
+      return;
+    }
+    const payload = buildHostPayload({
+      currentTime: video.currentTime,
+      paused: true,
+      playbackRate: video.playbackRate,
+    });
+    if (!payload) return;
+    socket.emit("video-pause", payload);
+  }, [buildHostPayload]);
+
+  const emitPlaybackSeek = useCallback(
+    (opts?: { paused?: boolean }) => {
+      const socket = socketRef.current;
+      const video = videoRefStable.current.current;
+      if (
+        !socket ||
+        !video ||
+        !isPlaybackHostRef.current ||
+        isApplyingRemoteRef.current
+      ) {
+        return;
+      }
+      const paused = opts?.paused ?? video.paused;
+      const payload = buildHostPayload({
+        currentTime: video.currentTime,
+        paused,
+        playbackRate: video.playbackRate,
+      });
+      if (!payload) return;
+      socket.emit("video-seek", payload);
+    },
+    [buildHostPayload],
+  );
+
+  const applyIncomingTransport = useCallback(
+    async (
+      data: PlaybackTransportPayload & { paused?: boolean },
+      mode: "play" | "pause" | "seek" | "state",
+    ) => {
+      const video = videoRefStable.current.current;
+      const activeRoom = activeRoomRef.current;
+      if (!video || !activeRoom) return;
+
+      if (
+        !isTransportContextMatch({
+          payloadRoom: data.room,
+          activeRoom,
+          payloadAssetId: data.assetId,
+          activeAssetId: getActiveAssetId(),
+        })
+      ) {
+        return;
+      }
+
+      if (!shouldAcceptRemoteSeq(lastAppliedSeqRef.current, data.seq)) {
+        return;
+      }
+
+      lastAppliedSeqRef.current = data.seq;
+      if (data.seq > localSeqRef.current) {
+        localSeqRef.current = data.seq;
+      }
+
+      const paused =
+        mode === "play"
+          ? false
+          : mode === "pause"
+            ? true
+            : typeof data.paused === "boolean"
+              ? data.paused
+              : video.paused;
+
+      isApplyingRemoteRef.current = true;
+      try {
+        await applyRemotePlayback(
+          video,
+          {
+            currentTime: data.currentTime,
+            paused,
+            playbackRate: data.playbackRate,
+          },
+          {
+            driftTolerance: PLAYBACK_DRIFT_TOLERANCE_SEC,
+            forceSeek: mode === "state" || mode === "seek",
+          },
+        );
+      } finally {
+        // Allow seeked/play events from the element to settle before re-enabling emits
+        window.setTimeout(() => {
+          isApplyingRemoteRef.current = false;
+        }, 50);
+      }
+    },
+    [getActiveAssetId],
+  );
 
   useEffect(() => {
     if (!socket || !user?.id) return;
 
     const roomToJoin = getReviewRoomId(previewFile, currentFolder);
-    if (activeRoomRef.current === roomToJoin) return;
+    const role = getAuthPlaybackRole(user);
 
-    const joinRoom = () => {
-      emitJoinReviewRoom(socket, roomToJoin);
+    const syncMembership = () => {
+      const previousRoom = activeRoomRef.current;
+      if (previousRoom && previousRoom !== roomToJoin) {
+        emitLeaveReviewRoom(socket, previousRoom);
+      }
+
+      const roomChanged = previousRoom !== roomToJoin;
+      if (roomChanged) {
+        localSeqRef.current = 0;
+        lastAppliedSeqRef.current = 0;
+        setIsPlaybackHost(false);
+        isPlaybackHostRef.current = false;
+      }
+
+      emitJoinReviewRoom(socket, roomToJoin, {
+        userId: user.id,
+        role,
+      });
       activeRoomRef.current = roomToJoin;
+
+      // Followers: pause until host state arrives (also refresh on reconnect)
+      if (!isHostCapableRole(role)) {
+        if (roomChanged) {
+          const video = videoRefStable.current.current;
+          if (video) {
+            isApplyingRemoteRef.current = true;
+            video.pause();
+            window.setTimeout(() => {
+              isApplyingRemoteRef.current = false;
+            }, 50);
+          }
+        }
+        socket.emit("request-playback-state", { room: roomToJoin });
+      }
     };
 
     if (socket.connected) {
-      joinRoom();
-    } else {
-      socket.once("connect", joinRoom);
+      syncMembership();
     }
+    socket.on("connect", syncMembership);
 
     return () => {
-      socket.off("connect", joinRoom);
+      socket.off("connect", syncMembership);
     };
-  }, [socket, user?.id, previewFile?.name, previewFile?.assetId, currentFolder]);
+  }, [
+    socket,
+    user?.id,
+    previewFile?.name,
+    previewFile?.assetId,
+    currentFolder,
+    user,
+  ]);
 
   useEffect(() => {
     if (!socket) return;
 
-    const handleVideoPlay = (data: { currentTime: number }) => {
-      const video = videoRefStable.current.current;
-      if (video && video.paused) {
-        if (Math.abs(video.currentTime - data.currentTime) > 0.5) {
-          video.currentTime = data.currentTime;
-        }
-        video.play().catch((e) => console.error("Auto-play blocked:", e));
-      }
+    const handleHostChanged = (data: {
+      room: string;
+      hostSocketId: string | null;
+    }) => {
+      if (data.room !== activeRoomRef.current) return;
+      const amHost = Boolean(data.hostSocketId && data.hostSocketId === socket.id);
+      isPlaybackHostRef.current = amHost;
+      setIsPlaybackHost(amHost);
     };
 
-    const handleVideoPause = (data: { currentTime: number }) => {
-      const video = videoRefStable.current.current;
-      if (video && !video.paused) {
-        if (Math.abs(video.currentTime - data.currentTime) > 0.5) {
-          video.currentTime = data.currentTime;
-        }
-        video.pause();
-      }
+    const handleVideoPlay = (data: PlaybackTransportPayload) => {
+      void applyIncomingTransport(data, "play");
     };
 
-    const handleVideoSeek = (data: { currentTime: number }) => {
-      const video = videoRefStable.current.current;
-      if (video && Math.abs(video.currentTime - data.currentTime) > 0.5) {
-        video.currentTime = data.currentTime;
-      }
+    const handleVideoPause = (data: PlaybackTransportPayload) => {
+      void applyIncomingTransport({ ...data, paused: true }, "pause");
     };
 
+    const handleVideoSeek = (data: PlaybackTransportPayload) => {
+      void applyIncomingTransport(data, "seek");
+    };
+
+    const handlePlaybackState = (
+      data: PlaybackTransportPayload & { paused: boolean },
+    ) => {
+      void applyIncomingTransport(data, "state");
+    };
+
+    const handleStateRequest = (data: {
+      room: string;
+      requesterSocketId?: string;
+    }) => {
+      if (!isPlaybackHostRef.current) return;
+      if (data.room !== activeRoomRef.current) return;
+      const video = videoRefStable.current.current;
+      if (!video) return;
+
+      localSeqRef.current += 1;
+      const payload = buildTransportPayload({
+        room: data.room,
+        assetId: getActiveAssetId() || undefined,
+        currentTime: video.currentTime,
+        paused: video.paused,
+        playbackRate: video.playbackRate,
+        seq: localSeqRef.current,
+      });
+
+      socket.emit("playback-state", {
+        ...payload,
+        paused: video.paused,
+        targetSocketId: data.requesterSocketId,
+      });
+    };
+
+    socket.on("playback-host-changed", handleHostChanged);
     socket.on("video-play", handleVideoPlay);
     socket.on("video-pause", handleVideoPause);
     socket.on("video-seek", handleVideoSeek);
+    socket.on("playback-state", handlePlaybackState);
+    socket.on("request-playback-state", handleStateRequest);
 
     return () => {
+      socket.off("playback-host-changed", handleHostChanged);
       socket.off("video-play", handleVideoPlay);
       socket.off("video-pause", handleVideoPause);
       socket.off("video-seek", handleVideoSeek);
+      socket.off("playback-state", handlePlaybackState);
+      socket.off("request-playback-state", handleStateRequest);
     };
-  }, [socket]);
+  }, [socket, applyIncomingTransport, getActiveAssetId]);
+
+  const jumpToTime = (time: number) => {
+    if (!videoRef.current) return;
+    videoRef.current.currentTime = time;
+    void videoRef.current.play().catch(() => {
+      /* autoplay may block; seek still applied */
+    });
+    if (isPlaybackHostRef.current && !isApplyingRemoteRef.current) {
+      // Emit after play attempt so paused flag reflects outcome
+      window.setTimeout(() => {
+        emitPlaybackSeek({ paused: videoRef.current?.paused ?? false });
+      }, 0);
+    }
+  };
 
   const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -714,18 +981,6 @@ export const useLiveComments = (
     URL.revokeObjectURL(url);
   };
 
-  const jumpToTime = (time: number) => {
-    if (videoRef.current) {
-      videoRef.current.currentTime = time;
-      videoRef.current.play();
-      if (socket) {
-        const reviewRoomId = getReviewRoomId(previewFile, currentFolder);
-        socket.emit("video-seek", { room: reviewRoomId, currentTime: time });
-        socket.emit("video-play", { room: reviewRoomId, currentTime: time });
-      }
-    }
-  };
-
   return {
     comments,
     setComments,
@@ -735,6 +990,7 @@ export const useLiveComments = (
     isLive,
     isNotifying,
     notificationSent,
+    isPlaybackHost,
     fetchComments: fetchCommentsForPreview,
     handleAddComment,
     handleDeleteComment,
@@ -745,5 +1001,8 @@ export const useLiveComments = (
     handleDownloadReport,
     handleExportMarkers,
     jumpToTime,
+    emitPlaybackPlay,
+    emitPlaybackPause,
+    emitPlaybackSeek,
   };
 };

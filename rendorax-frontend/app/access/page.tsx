@@ -6,6 +6,7 @@ import Image from "next/image";
 import { createClient } from "@/utils/supabase/client";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
+import PasswordField from "@/components/PasswordField";
 
 export default function AccessPage() {
   const [email, setEmail] = useState("");
@@ -70,8 +71,11 @@ export default function AccessPage() {
             Secure Access Protocol
           </span>
           <h1 className="text-3xl md:text-4xl font-display text-white mb-2">
-            Client Vault
+            Studio Access
           </h1>
+          <p className="text-sm text-text-gray font-light leading-relaxed">
+            Sign in to your Rendorax workspace.
+          </p>
         </div>
 
         {/* এরর বা সাকসেস মেসেজ */}
@@ -101,6 +105,7 @@ export default function AccessPage() {
               className="w-full bg-black/50 border border-white/10 p-4 text-white text-sm focus:border-gold-primary focus:bg-black focus:outline-none transition-colors"
               required
               disabled={loading}
+              autoComplete="email"
               placeholder="hello@brand.com"
             />
           </div>
@@ -109,13 +114,13 @@ export default function AccessPage() {
             <label className="block text-[10px] uppercase tracking-widest text-text-gray mb-3 font-mono">
               Password *
             </label>
-            <input
-              type="password"
+            <PasswordField
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full bg-black/50 border border-white/10 p-4 text-white text-sm focus:border-gold-primary focus:bg-black focus:outline-none transition-colors"
               required
               disabled={loading}
+              autoComplete="current-password"
               placeholder="••••••••"
             />
             <p className="mt-3 text-right">

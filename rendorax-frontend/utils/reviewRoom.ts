@@ -47,10 +47,29 @@ export function getReviewRoomId(
   return "global-lobby";
 }
 
+export type JoinVideoRoomPayload = {
+  room: string;
+  userId?: string;
+  role?: string;
+};
+
 /** Idempotent join for the active review room (call before share emit). */
 export function emitJoinReviewRoom(
-  socket: { connected: boolean; emit: (event: string, ...args: unknown[]) => void },
+  socket: { emit: (event: string, ...args: unknown[]) => void },
+  roomId: string,
+  meta?: { userId?: string; role?: string },
+): void {
+  const payload: JoinVideoRoomPayload = {
+    room: roomId,
+    ...(meta?.userId ? { userId: meta.userId } : {}),
+    ...(meta?.role ? { role: meta.role } : {}),
+  };
+  socket.emit("join-video-room", payload);
+}
+
+export function emitLeaveReviewRoom(
+  socket: { emit: (event: string, ...args: unknown[]) => void },
   roomId: string,
 ): void {
-  socket.emit("join-video-room", roomId);
+  socket.emit("leave-video-room", { room: roomId });
 }

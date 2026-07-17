@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import PasswordField from "@/components/PasswordField";
 import { lockPrivateReel, verifyPrivateReelPasscode } from "./actions";
 
 type PrivateReelClientProps = {
@@ -81,8 +82,7 @@ export default function PrivateReelClient({
 
             <form onSubmit={handleUnlock} className="space-y-4">
               <div>
-                <input
-                  type="password"
+                <PasswordField
                   value={passcode}
                   onChange={(e) => setPasscode(e.target.value)}
                   placeholder="Enter Access Code"

@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { createClient } from "@/utils/supabase/client";
 import Navbar from "@/components/Navbar";
+import PasswordField from "@/components/PasswordField";
 
 export default function ResetPasswordPage() {
   const [password, setPassword] = useState("");
@@ -173,8 +174,7 @@ export default function ResetPasswordPage() {
                   <label className="block text-[10px] uppercase tracking-widest text-text-gray mb-3 font-mono">
                     New Password *
                   </label>
-                  <input
-                    type="password"
+                  <PasswordField
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full bg-black/50 border border-white/10 p-4 text-white text-sm focus:border-gold-primary focus:bg-black focus:outline-none transition-colors"
@@ -189,8 +189,7 @@ export default function ResetPasswordPage() {
                   <label className="block text-[10px] uppercase tracking-widest text-text-gray mb-3 font-mono">
                     Confirm Password *
                   </label>
-                  <input
-                    type="password"
+                  <PasswordField
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     className="w-full bg-black/50 border border-white/10 p-4 text-white text-sm focus:border-gold-primary focus:bg-black focus:outline-none transition-colors"

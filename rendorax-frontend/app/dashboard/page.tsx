@@ -905,6 +905,10 @@ export default function DashboardPage() {
     handleDownloadReport,
     handleExportMarkers,
     jumpToTime,
+    emitPlaybackPlay,
+    emitPlaybackPause,
+    emitPlaybackSeek,
+    isPlaybackHost,
   } = useLiveComments(user, previewFile, videoRef, currentFolder);
 
   // Over-the-Shoulder (OTS) Screen Share Refs
@@ -1271,6 +1275,9 @@ export default function DashboardPage() {
     if (videoRef.current.paused) {
       videoRef.current
         .play()
+        .then(() => {
+          emitPlaybackPlay();
+        })
         .catch((e) => console.error("Main Video Play Error:", e));
       if (
         flags?.enable_compare_mode &&
@@ -1283,6 +1290,7 @@ export default function DashboardPage() {
       }
     } else {
       videoRef.current.pause();
+      emitPlaybackPause();
       if (
         flags?.enable_compare_mode &&
         isCompareMode &&
@@ -1291,7 +1299,33 @@ export default function DashboardPage() {
         compareVideoRef.current.pause();
       }
     }
-  }, [flags, isCompareMode]);
+  }, [flags, isCompareMode, emitPlaybackPlay, emitPlaybackPause]);
+
+  const handleSeekCommit = useCallback(() => {
+    emitPlaybackSeek();
+  }, [emitPlaybackSeek]);
+
+  const handleStepBackward = useCallback(() => {
+    stepBackward();
+    emitPlaybackSeek({ paused: true });
+  }, [stepBackward, emitPlaybackSeek]);
+
+  const handleStepForward = useCallback(() => {
+    stepForward();
+    emitPlaybackSeek({ paused: true });
+  }, [stepForward, emitPlaybackSeek]);
+
+  const handleSkipSeconds = useCallback(
+    (delta: number) => {
+      if (!videoRef.current) return;
+      const video = videoRef.current;
+      const next = video.currentTime + delta;
+      const max = Number.isFinite(video.duration) ? video.duration : next;
+      video.currentTime = Math.max(0, Math.min(max, next));
+      emitPlaybackSeek();
+    },
+    [emitPlaybackSeek],
+  );
 
   const lastAutoplayedPreviewKeyRef = useRef("");
 
@@ -1436,10 +1470,10 @@ export default function DashboardPage() {
         return;
       if (e.key === ",") {
         e.preventDefault();
-        stepBackward();
+        handleStepBackward();
       } else if (e.key === ".") {
         e.preventDefault();
-        stepForward();
+        handleStepForward();
       } else if (e.key === " ") {
         e.preventDefault();
         handleTogglePlay();
@@ -1447,7 +1481,14 @@ export default function DashboardPage() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [previewFile, stepBackward, stepForward, isCompareMode, flags, handleTogglePlay]);
+  }, [
+    previewFile,
+    handleStepBackward,
+    handleStepForward,
+    isCompareMode,
+    flags,
+    handleTogglePlay,
+  ]);
 
   // Resize handlers
   const handleMouseMoveLeft = useCallback((e: MouseEvent) => {
@@ -3174,6 +3215,7 @@ export default function DashboardPage() {
                             }
                             comments={comments}
                             onMarkerClick={jumpToTime}
+                            onSeekCommit={handleSeekCommit}
                           />
                         <fieldset
                           disabled={playerControlsDisabled}
@@ -3203,7 +3245,7 @@ export default function DashboardPage() {
                           <div className="flex items-center gap-1 sm:gap-2">
                             <button
                               type="button"
-                              onClick={stepBackward}
+                              onClick={handleStepBackward}
                               className="px-2 py-1 bg-[#050505] hover:bg-[#d4af37]/20 border border-white/5 hover:border-[#d4af37]/30 text-gray-300 hover:text-[#d4af37] rounded disabled:hover:bg-[#050505] disabled:hover:text-gray-300"
                             >
                               <svg
@@ -3225,7 +3267,7 @@ export default function DashboardPage() {
                             </div>
                             <button
                               type="button"
-                              onClick={stepForward}
+                              onClick={handleStepForward}
                               className="px-2 py-1 bg-[#050505] hover:bg-[#d4af37]/20 border border-white/5 hover:border-[#d4af37]/30 text-gray-300 hover:text-[#d4af37] rounded disabled:hover:bg-[#050505] disabled:hover:text-gray-300"
                             >
                               <svg
@@ -3249,26 +3291,14 @@ export default function DashboardPage() {
                           <div className="flex items-center gap-1">
                             <button
                               type="button"
-                              onClick={() => {
-                                if (videoRef.current)
-                                  videoRef.current.currentTime = Math.max(
-                                    0,
-                                    videoRef.current.currentTime - 5,
-                                  );
-                              }}
+                              onClick={() => handleSkipSeconds(-5)}
                               className="px-1 sm:px-2 py-1 bg-[#050505] border border-white/5 hover:text-white rounded text-[9px] sm:text-[10px] font-mono disabled:hover:text-gray-300"
                             >
                               -5s
                             </button>
                             <button
                               type="button"
-                              onClick={() => {
-                                if (videoRef.current)
-                                  videoRef.current.currentTime = Math.min(
-                                    videoRef.current.duration,
-                                    videoRef.current.currentTime + 5,
-                                  );
-                              }}
+                              onClick={() => handleSkipSeconds(5)}
                               className="px-1 sm:px-2 py-1 bg-[#050505] border border-white/5 hover:text-white rounded text-[9px] sm:text-[10px] font-mono disabled:hover:text-gray-300"
                             >
                               +5s

@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import Navbar from "@/components/Navbar";
+import PasswordField from "@/components/PasswordField";
 import { createClient } from "@/utils/supabase/client";
 import {
   acceptInvite,
@@ -168,13 +169,15 @@ export default function InviteAcceptPage() {
                 <label className="block text-[9px] uppercase tracking-widest text-text-gray mb-1">
                   Password *
                 </label>
-                <input
-                  type="password"
+                  <PasswordField
                   required
                   minLength={8}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={submitting}
+                  autoComplete={
+                    accountExists ? "current-password" : "new-password"
+                  }
                   className="w-full bg-[#0a0a0f] border border-white/10 p-2.5 text-sm text-white outline-none focus:border-gold-primary"
                 />
               </div>
@@ -182,13 +185,15 @@ export default function InviteAcceptPage() {
                 <label className="block text-[9px] uppercase tracking-widest text-text-gray mb-1">
                   Confirm password *
                 </label>
-                <input
-                  type="password"
+                <PasswordField
                   required
                   minLength={8}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   disabled={submitting}
+                  autoComplete={
+                    accountExists ? "current-password" : "new-password"
+                  }
                   className="w-full bg-[#0a0a0f] border border-white/10 p-2.5 text-sm text-white outline-none focus:border-gold-primary"
                 />
               </div>

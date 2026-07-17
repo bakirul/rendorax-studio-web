@@ -14,6 +14,8 @@ interface VideoTimelineScrubberProps {
   mediaKey?: string;
   comments?: ReadonlyArray<TimelineScrubberComment>;
   onMarkerClick?: (timeSeconds: number) => void;
+  /** Fired once when the user finishes a scrub gesture (not on every input tick). */
+  onSeekCommit?: (timeSeconds: number) => void;
 }
 
 function formatClock(seconds: number): string {
@@ -42,6 +44,7 @@ export default function VideoTimelineScrubber({
   mediaKey = "",
   comments = [],
   onMarkerClick,
+  onSeekCommit,
 }: VideoTimelineScrubberProps) {
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
@@ -127,7 +130,10 @@ export default function VideoTimelineScrubber({
   const endScrub = () => {
     isScrubbingRef.current = false;
     const video = videoRef.current;
-    if (video) setCurrentTime(video.currentTime);
+    if (video) {
+      setCurrentTime(video.currentTime);
+      onSeekCommit?.(video.currentTime);
+    }
   };
 
   const handleMarkerClick = (

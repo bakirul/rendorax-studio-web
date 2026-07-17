@@ -35,7 +35,7 @@ import {
 } from "@/utils/editorSpecializations";
 import GalleryViewModeToggle from "@/components/dashboard/GalleryViewModeToggle";
 import type { GalleryViewMode } from "@/hooks/useGalleryViewStyles";
-import { Eye, EyeOff } from "lucide-react";
+import PasswordField from "@/components/PasswordField";
 
 const CLIENT_DISCOVERY_TIMEOUT_MS = 10_000;
 
@@ -297,7 +297,6 @@ export default function AdminPortal() {
   );
   const [agencyUsers, setAgencyUsers] = useState<any[]>([]);
   const [showUserForm, setShowUserForm] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
   const [clientSearchQuery, setClientSearchQuery] = useState("");
   const [clientFilter, setClientFilter] = useState<"all" | "active" | "legacy">("all");
   const [newUser, setNewUser] = useState<{
@@ -447,7 +446,6 @@ export default function AdminPortal() {
           text: `${roleLabel} created successfully.`,
         });
         setShowUserForm(false);
-        setShowPassword(false);
         setNewUser({
           role: "client",
           displayName: "",
@@ -1310,7 +1308,6 @@ export default function AdminPortal() {
                 <button
                   type="button"
                   onClick={() => {
-                    if (showUserForm) setShowPassword(false);
                     setShowUserForm(!showUserForm);
                   }}
                   className="text-[10px] bg-gold-primary/10 text-gold-primary border border-gold-primary/30 px-2.5 py-1 uppercase tracking-widest hover:bg-gold-primary hover:text-black transition-colors shrink-0"
@@ -1435,36 +1432,21 @@ export default function AdminPortal() {
                       <label className="block text-[10px] uppercase tracking-widest text-text-gray mb-2">
                         Temporary Password *
                       </label>
-                      <div className="relative">
-                        <input
-                          required
-                          type={showPassword ? "text" : "password"}
-                          autoComplete="new-password"
-                          minLength={6}
-                          placeholder={
-                            newUser.role === "editor"
-                              ? "Temporary editor password"
-                              : "Temporary client password"
-                          }
-                          value={newUser.password}
-                          onChange={(e) =>
-                            setNewUser({ ...newUser, password: e.target.value })
-                          }
-                          className="w-full bg-bg-panel border border-white/10 p-2.5 pr-10 text-sm text-white focus:border-gold-primary outline-none"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword((prev) => !prev)}
-                          className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-text-gray hover:text-gold-primary transition-colors"
-                          aria-label={showPassword ? "Hide password" : "Show password"}
-                        >
-                          {showPassword ? (
-                            <EyeOff size={16} aria-hidden="true" />
-                          ) : (
-                            <Eye size={16} aria-hidden="true" />
-                          )}
-                        </button>
-                      </div>
+                      <PasswordField
+                        required
+                        autoComplete="new-password"
+                        minLength={6}
+                        placeholder={
+                          newUser.role === "editor"
+                            ? "Temporary editor password"
+                            : "Temporary client password"
+                        }
+                        value={newUser.password}
+                        onChange={(e) =>
+                          setNewUser({ ...newUser, password: e.target.value })
+                        }
+                        className="w-full bg-bg-panel border border-white/10 p-2.5 text-sm text-white focus:border-gold-primary outline-none"
+                      />
                     </div>
                   </div>
                   <button

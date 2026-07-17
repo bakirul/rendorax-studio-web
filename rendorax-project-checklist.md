@@ -785,6 +785,8 @@ When assisting with this project, keep these constraints in mind:
 | 2026-07-17 | Homepage onboarding path clarified for visitors | Compact “How projects begin” after Client Vault; Contact note; no public signup; CTA “Discuss Your Project” |
 | 2026-07-17 | Homepage subtle interaction polish | CSS + one-time IntersectionObserver reveals; hover lift on cards; prefers-reduced-motion; no copy/API changes |
 | 2026-07-17 | Marketing site mobile layout polish | Safer 320–430px wrapping, touch targets, spacing, journey overflow, nav/menu; no copy/SEO/backend changes |
+| 2026-07-17 | Studio Access label + password visibility | Navbar/access role-neutral “Studio Access”; reusable PasswordField on login/reset/invite/admin/private-reel; no auth/backend changes |
+| 2026-07-17 | Phase 1 review playback transport sync | Host admin/editor Socket.IO play/pause/seek + late-join state; followers follow; leave-room; ephemeral in-memory host; no Cinema/schema changes |
 
 | Date | Decision | Rationale |
 |------|----------|-----------|
