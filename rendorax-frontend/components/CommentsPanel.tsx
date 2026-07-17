@@ -1,4 +1,7 @@
 import React, { useMemo, useState } from "react";
+import LiveTeamMembers, {
+  type LiveTeamMember,
+} from "@/components/dashboard/LiveTeamMembers";
 import CommentAuthorBadge from "@/components/CommentAuthorBadge";
 import CommentSceneThumbnail from "@/components/CommentSceneThumbnail";
 import {
@@ -25,6 +28,8 @@ interface CommentsPanelProps {
   isLive?: boolean;
   disabled?: boolean;
   disabledPlaceholder?: string;
+  liveTeamMembers?: LiveTeamMember[];
+  enableTeamInvite?: boolean;
 }
 
 function formatResolvedMeta(comment: VideoCommentRow): string | null {
@@ -39,6 +44,13 @@ function formatResolvedMeta(comment: VideoCommentRow): string | null {
     : null;
   if (when) return `Resolved · ${when}`;
   return "Resolved";
+}
+
+function formatCommentClock(seconds: number): string {
+  const total = Math.max(0, Math.floor(seconds));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
 export default function CommentsPanel({
@@ -57,8 +69,16 @@ export default function CommentsPanel({
   isLive = false,
   disabled = false,
   disabledPlaceholder,
+  liveTeamMembers = [],
+  enableTeamInvite = false,
 }: CommentsPanelProps) {
   const [filter, setFilter] = useState<CommentFilter>("all");
+
+  const metrics = useMemo(() => {
+    const open = comments.filter((c) => !c.is_resolved).length;
+    const resolved = comments.filter((c) => Boolean(c.is_resolved)).length;
+    return { open, resolved, total: comments.length };
+  }, [comments]);
 
   const visibleComments = useMemo(() => {
     if (filter === "open") {
@@ -71,24 +91,50 @@ export default function CommentsPanel({
   }, [comments, filter]);
 
   return (
-    <aside className="w-full bg-[#121217] flex flex-col h-full border-l border-white/5 shrink-0 shadow-[-10px_0_30px_rgba(0,0,0,0.5)] z-10">
-      <div className="h-14 flex items-center justify-between px-4 border-b border-white/5 shrink-0 bg-[#121217]">
-        <h3 className="text-xs font-semibold text-gray-200 uppercase tracking-widest">
-          Comments
+    <aside className="z-10 flex h-full w-full shrink-0 flex-col border-l border-white/5 bg-[#121217] shadow-[-10px_0_30px_rgba(0,0,0,0.5)]">
+      <div className="flex h-12 shrink-0 items-center justify-between border-b border-white/5 bg-[#121217] px-4">
+        <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-100">
+          Review Feedback
         </h3>
 
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-2">
           <div
-            className={`h-2 w-2 rounded-full ${isLive ? "bg-green-500 animate-pulse" : "bg-red-500"}`}
-          ></div>
-          <span className="text-[10px] text-gray-400 uppercase tracking-wider">
+            className={`h-2 w-2 rounded-full ${isLive ? "bg-emerald-500" : "bg-zinc-600"}`}
+            aria-hidden
+          />
+          <span className="text-[10px] uppercase tracking-wider text-gray-400">
             {isLive ? "Live Sync" : "Offline"}
           </span>
         </div>
       </div>
 
+      <LiveTeamMembers
+        members={liveTeamMembers}
+        isLive={isLive}
+        enableInvite={enableTeamInvite}
+      />
+
+      <div className="flex shrink-0 items-center gap-3 border-b border-white/5 px-4 py-2">
+        <div className="flex min-w-0 flex-1 items-center gap-3 text-[10px] uppercase tracking-widest text-zinc-500">
+          <span>
+            Open{" "}
+            <span className="font-semibold text-[#d4af37]">{metrics.open}</span>
+          </span>
+          <span className="text-zinc-700">·</span>
+          <span>
+            Resolved{" "}
+            <span className="font-semibold text-zinc-300">{metrics.resolved}</span>
+          </span>
+          <span className="text-zinc-700">·</span>
+          <span>
+            Total{" "}
+            <span className="font-semibold text-white">{metrics.total}</span>
+          </span>
+        </div>
+      </div>
+
       {comments.length > 0 && (
-        <div className="flex items-center gap-1 px-4 py-2 border-b border-white/5 shrink-0">
+        <div className="flex shrink-0 items-center gap-1 border-b border-white/5 px-4 py-1.5">
           {(
             [
               ["all", "All"],
@@ -100,9 +146,9 @@ export default function CommentsPanel({
               key={key}
               type="button"
               onClick={() => setFilter(key)}
-              className={`px-2 py-0.5 text-[9px] uppercase tracking-widest transition-colors ${
+              className={`rounded px-2 py-1 text-[9px] uppercase tracking-widest transition-colors ${
                 filter === key
-                  ? "text-[#d4af37]"
+                  ? "bg-[#d4af37]/10 text-[#d4af37]"
                   : "text-zinc-500 hover:text-zinc-300"
               }`}
             >
@@ -112,14 +158,14 @@ export default function CommentsPanel({
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+      <div className="custom-scrollbar flex-1 space-y-3 overflow-y-auto p-3">
         {visibleComments.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-xs text-gray-500 italic">
+          <div className="flex h-full items-center justify-center px-4 text-center text-xs leading-relaxed text-gray-500">
             {disabled
               ? "Select a video to view or add comments"
               : filter !== "all" && comments.length > 0
                 ? `No ${filter} comments.`
-                : "No feedback yet."}
+                : "Leave frame-accurate feedback directly on the review timeline."}
           </div>
         ) : (
           visibleComments.map((comment) => {
@@ -128,8 +174,8 @@ export default function CommentsPanel({
             return (
               <div
                 key={comment.id}
-                className={`group my-2 flex items-start justify-between gap-2 rounded border border-zinc-800/50 bg-zinc-900/60 p-2 ${
-                  resolved ? "opacity-55" : ""
+                className={`group flex items-start justify-between gap-2 rounded-md border border-white/10 bg-[#0c0c12] p-2.5 ${
+                  resolved ? "opacity-60" : ""
                 }`}
               >
                 <div className="flex min-w-0 flex-1 items-start gap-2.5">
@@ -139,8 +185,18 @@ export default function CommentsPanel({
                       timestampSeconds={comment.time_stamp}
                     />
                   )}
-                  <div className="min-w-0 text-sm">
-                    <div className="mb-1 flex min-w-0 flex-wrap items-center gap-1.5">
+                  <div className="min-w-0 flex-1">
+                    <button
+                      type="button"
+                      onClick={() => jumpToTime(comment.time_stamp)}
+                      className="mb-1 font-mono text-sm font-semibold text-[#d4af37] hover:underline focus:outline-none focus-visible:ring-1 focus-visible:ring-[#d4af37]"
+                    >
+                      {formatCommentClock(comment.time_stamp)}
+                    </button>
+                    <p className="text-sm leading-snug text-zinc-100">
+                      {comment.display_text || comment.comment_text}
+                    </p>
+                    <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
                       <CommentAuthorBadge
                         displayName={getCommentDisplayName(comment)}
                         avatarUrl={comment.author_avatar_url}
@@ -157,27 +213,17 @@ export default function CommentsPanel({
                       >
                         {resolved ? "Resolved" : "Open"}
                       </span>
+                      {comment.translated && (
+                        <span className="text-[9px] uppercase tracking-wide text-zinc-500">
+                          Translated
+                        </span>
+                      )}
+                      {comment.translationFailed && (
+                        <span className="text-[9px] uppercase tracking-wide text-zinc-500">
+                          Translation unavailable
+                        </span>
+                      )}
                     </div>
-                    <button
-                      onClick={() => jumpToTime(comment.time_stamp)}
-                      className="text-[#d4af37] font-mono mr-2 hover:underline focus:outline-none"
-                    >
-                      {Math.floor(comment.time_stamp / 60)}:
-                      {("0" + Math.floor(comment.time_stamp % 60)).slice(-2)}
-                    </button>
-                    <span className="text-zinc-200">
-                      {comment.display_text || comment.comment_text}
-                    </span>
-                    {comment.translated && (
-                      <span className="ml-2 text-[9px] uppercase tracking-wide text-zinc-500">
-                        Translated
-                      </span>
-                    )}
-                    {comment.translationFailed && (
-                      <span className="ml-2 text-[9px] uppercase tracking-wide text-zinc-500">
-                        Translation unavailable
-                      </span>
-                    )}
                     {resolvedMeta && (
                       <p className="mt-1 text-[9px] uppercase tracking-wide text-zinc-500">
                         {resolvedMeta}
@@ -190,7 +236,7 @@ export default function CommentsPanel({
                           onClick={() =>
                             handleResolveComment(comment.id, !resolved)
                           }
-                          className="text-[9px] uppercase tracking-widest text-zinc-400 hover:text-[#d4af37] transition-colors"
+                          className="text-[9px] uppercase tracking-widest text-zinc-400 transition-colors hover:text-[#d4af37]"
                         >
                           {resolved ? "Reopen" : "Resolve"}
                         </button>
@@ -198,12 +244,12 @@ export default function CommentsPanel({
                     )}
                   </div>
                 </div>
-                <div className="flex items-center space-x-1 md:opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                <div className="flex items-center space-x-1 opacity-100 transition-opacity duration-150 md:opacity-0 md:group-hover:opacity-100">
                   <button
                     onClick={() =>
                       handleEditComment(comment.id, comment.comment_text)
                     }
-                    className="text-zinc-500 hover:text-[#d4af37] p-1 rounded transition-colors"
+                    className="rounded p-1 text-zinc-500 transition-colors hover:text-[#d4af37]"
                     title="Edit"
                   >
                     <svg
@@ -222,7 +268,7 @@ export default function CommentsPanel({
                   </button>
                   <button
                     onClick={() => handleDeleteComment(comment.id)}
-                    className="text-zinc-500 hover:text-red-500 p-1 rounded transition-colors"
+                    className="rounded p-1 text-zinc-500 transition-colors hover:text-red-500"
                     title="Delete"
                   >
                     <svg
@@ -246,7 +292,7 @@ export default function CommentsPanel({
         )}
       </div>
 
-      <div className="shrink-0 bg-[#121217] border-t border-white/5 pb-24">
+      <div className="shrink-0 border-t border-white/5 bg-[#121217] pb-24">
         <form onSubmit={handleAddComment} className="p-4">
           <textarea
             value={newComment}
@@ -254,42 +300,42 @@ export default function CommentsPanel({
             placeholder={
               disabled
                 ? disabledPlaceholder ||
-                  "Select a video to leave a comment..."
-                : "Leave a comment..."
+                  "Select a video to leave feedback..."
+                : "Add frame-accurate feedback…"
             }
             rows={2}
             disabled={disabled}
-            className="w-full bg-[#050505] border border-white/10 rounded-md p-3 text-xs text-white outline-none focus:border-[#d4af37] resize-none mb-3 disabled:cursor-not-allowed disabled:opacity-50"
+            className="mb-3 w-full resize-none rounded-md border border-white/10 bg-[#050505] p-3 text-xs text-white outline-none focus:border-[#d4af37] disabled:cursor-not-allowed disabled:opacity-50"
           />
 
           <button
             type="submit"
             disabled={disabled || !newComment.trim()}
-            className={`w-full py-2.5 rounded-md text-[10px] font-bold uppercase tracking-widest transition-colors ${
+            className={`min-h-[44px] w-full rounded-md py-2.5 text-[10px] font-bold uppercase tracking-widest transition-colors ${
               !disabled && newComment.trim()
-                ? "bg-[#d4af37] hover:bg-[#b8952b] text-black"
-                : "bg-gray-800 text-gray-500 cursor-not-allowed"
+                ? "bg-[#d4af37] text-black hover:bg-[#b8952b]"
+                : "cursor-not-allowed bg-gray-800 text-gray-500"
             }`}
           >
-            Post Comment
+            Post Feedback
           </button>
         </form>
         {comments.length > 0 && !disabled && (
           <div className="px-4 pb-4">
-            <div className="p-3 border border-white/5 bg-[#1c1c24] rounded-lg">
-              <p className="text-[10px] text-gray-400 mb-2">
+            <div className="rounded-lg border border-white/5 bg-[#1c1c24] p-3">
+              <p className="mb-2 text-[10px] text-gray-400">
                 Once you have finished adding all comments, send a single
                 summary alert to the team:
               </p>
               <button
                 onClick={handleNotifyTeam}
                 disabled={isNotifying}
-                className={`w-full py-2.5 px-4 rounded text-[10px] font-bold uppercase tracking-widest ${notificationSent ? "bg-green-600 text-white" : "bg-[#121217] border border-[#d4af37] text-[#d4af37] hover:bg-[#d4af37] hover:text-black"}`}
+                className={`min-h-[44px] w-full rounded px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest ${notificationSent ? "bg-green-600 text-white" : "border border-[#d4af37] bg-[#121217] text-[#d4af37] hover:bg-[#d4af37] hover:text-black"}`}
               >
                 {isNotifying
                   ? "Sending..."
                   : notificationSent
-                    ? "✓ Team Notified!"
+                    ? "Team Notified"
                     : `Notify Team (${comments.length} Notes)`}
               </button>
             </div>

@@ -168,7 +168,7 @@ export default function VideoTimelineScrubber({
             <button
               key={comment.id}
               type="button"
-              className="absolute top-1/2 z-20 flex h-3 w-3 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-sm border border-[#1a1a1f] bg-[#c9a227] shadow-[0_0_0_1px_rgba(212,175,55,0.35)] transition-transform hover:scale-125 focus:outline-none focus-visible:ring-1 focus-visible:ring-[#d4af37]"
+              className="absolute top-1/2 z-20 flex h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-[#0a0a0f] bg-[#d4af37] shadow-[0_0_0_1px_rgba(212,175,55,0.45)] transition-transform hover:scale-125 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#d4af37] focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0f]"
               style={{ left: `${comment.percent}%` }}
               title={`${formatClock(comment.time_stamp)} — ${truncateText(comment.comment_text)}`}
               aria-label={`Jump to comment at ${formatClock(comment.time_stamp)}: ${truncateText(comment.comment_text, 120)}`}

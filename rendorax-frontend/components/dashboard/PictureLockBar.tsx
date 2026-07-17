@@ -16,11 +16,13 @@ export type PictureLockViewerRole = "client" | "editor" | "admin";
 interface PictureLockBarProps {
   mediaAssetId: string;
   viewerRole: PictureLockViewerRole;
+  compact?: boolean;
 }
 
 export default function PictureLockBar({
   mediaAssetId,
   viewerRole,
+  compact = false,
 }: PictureLockBarProps) {
   const [isLocked, setIsLocked] = useState(false);
   const [latest, setLatest] = useState<PictureLockEvent | null>(null);
@@ -112,9 +114,21 @@ export default function PictureLockBar({
   const canMutate = viewerRole === "client" || viewerRole === "editor";
 
   return (
-    <div className="w-full border-b border-[#d4af37]/15 bg-[#12121a] px-4 py-3 shrink-0">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0 space-y-2">
+    <div
+      className={`w-full shrink-0 ${
+        compact
+          ? "bg-transparent px-3 py-2 sm:px-4"
+          : "border-b border-[#d4af37]/15 bg-[#12121a] px-4 py-3"
+      }`}
+    >
+      <div
+        className={`flex gap-2 ${
+          compact
+            ? "flex-col sm:flex-row sm:items-center sm:justify-between"
+            : "flex-col gap-3 lg:flex-row lg:items-start lg:justify-between"
+        }`}
+      >
+        <div className={`min-w-0 ${compact ? "space-y-1" : "space-y-2"}`}>
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#d4af37]">
               Picture Lock
@@ -130,7 +144,7 @@ export default function PictureLockBar({
             </span>
           </div>
 
-          {!loading && latest ? (
+          {!compact && !loading && latest ? (
             <div className="space-y-1 text-xs text-gray-400">
               <p>
                 <span className="text-gray-500">By </span>
@@ -157,7 +171,7 @@ export default function PictureLockBar({
             </div>
           ) : null}
 
-          {!loading && !latest && !error ? (
+          {!compact && !loading && !latest && !error ? (
             <p className="text-xs text-gray-500">
               This Review Version has not been picture-locked yet.
             </p>
@@ -198,7 +212,9 @@ export default function PictureLockBar({
       </div>
 
       {canMutate && unlockOpen && isLocked ? (
-        <div className="mt-3 rounded-lg border border-white/10 bg-black/30 p-3">
+        <div
+          className={`rounded-lg border border-white/10 bg-black/30 p-3 ${compact ? "mt-2" : "mt-3"}`}
+        >
           <label className="mb-2 block text-[10px] font-bold uppercase tracking-wide text-gray-400">
             Unlock reason (required)
           </label>
@@ -236,7 +252,7 @@ export default function PictureLockBar({
       ) : null}
 
       {!loading && history.length > 0 ? (
-        <div className="mt-3 border-t border-white/5 pt-3">
+        <div className={`border-t border-white/5 pt-2 ${compact ? "mt-2" : "mt-3 pt-3"}`}>
           <button
             type="button"
             onClick={() => setHistoryOpen((open) => !open)}

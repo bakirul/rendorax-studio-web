@@ -2,6 +2,10 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import {
+  getFolderDisplayLabel,
+  partitionProjectBinFolders,
+} from "@/utils/projectAssetFolders";
 
 interface SidebarProps {
   currentFolder: string;
@@ -145,8 +149,8 @@ const FolderNode = ({
       <div
         className={`group/folder flex items-center justify-between rounded-md text-xs font-medium transition-colors ${
           isActive
-            ? "bg-[#d4af37]/10 text-[#d4af37]"
-            : "text-gray-400 hover:bg-white/5 hover:text-white"
+            ? "border border-[#d4af37]/35 bg-[#d4af37]/12 text-[#d4af37]"
+            : "border border-transparent text-gray-400 hover:bg-white/5 hover:text-white"
         }`}
         style={{
           paddingLeft: `${totalDepth * INDENT_PX + 4}px`,
@@ -168,10 +172,10 @@ const FolderNode = ({
           <button
             onClick={() => onFolderClick(`${node.path}/`)}
             className="flex min-w-0 flex-1 items-center gap-2 truncate text-left"
-            title={node.name}
+            title={node.path}
           >
             <span className="shrink-0 text-sm">📁</span>
-            <span className="truncate">{node.name}</span>
+            <span className="truncate">{getFolderDisplayLabel(node.name)}</span>
           </button>
         </div>
 
@@ -241,24 +245,30 @@ function TreeSection({
   children: React.ReactNode;
 }) {
   return (
-    <div className="space-y-0.5">
+    <div className="space-y-1 border-b border-white/[0.04] pb-2 last:border-b-0">
       <button
         type="button"
         onClick={onToggle}
         className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left transition-colors hover:bg-white/[0.04]"
       >
         <Chevron expanded={isExpanded} />
-        <span className="shrink-0 text-sm">{emoji}</span>
+        <span className="shrink-0 text-xs opacity-70" aria-hidden>
+          {emoji}
+        </span>
         <span className="min-w-0 flex-1 truncate">
-          <span className={`text-[11px] font-semibold ${accentClass}`}>
+          <span
+            className={`text-[10px] font-bold uppercase tracking-[0.14em] ${accentClass}`}
+          >
             {title}
           </span>
-          <span className="text-[10px] text-gray-600"> / </span>
+          <span className="text-[10px] text-gray-600"> · </span>
           <span className="text-[10px] text-gray-500">{subtitle}</span>
         </span>
       </button>
 
-      {isExpanded && <TreeChildren className="space-y-0.5">{children}</TreeChildren>}
+      {isExpanded && (
+        <TreeChildren className="space-y-0.5">{children}</TreeChildren>
+      )}
     </div>
   );
 }
@@ -281,12 +291,14 @@ function LeafNode({
       onClick={onClick}
       className={`flex w-full items-center gap-2 rounded-md py-1.5 text-[11px] transition-colors ${
         isActive
-          ? "bg-[#d4af37]/10 text-[#d4af37]"
-          : "text-gray-500 hover:bg-white/5 hover:text-gray-300"
+          ? "border border-[#d4af37]/35 bg-[#d4af37]/12 text-[#d4af37]"
+          : "border border-transparent text-gray-500 hover:bg-white/5 hover:text-gray-300"
       }`}
       style={{ paddingLeft: `${indentLevel * INDENT_PX + 4}px` }}
     >
-      <span className="shrink-0 text-xs">{emoji}</span>
+      <span className="shrink-0 text-xs opacity-60" aria-hidden>
+        {emoji}
+      </span>
       <span className="truncate">{label}</span>
     </button>
   );
@@ -366,11 +378,18 @@ export default function VaultSidebar({
   const [cloudSectionOpen, setCloudSectionOpen] = useState(true);
   const [vaultSectionOpen, setVaultSectionOpen] = useState(true);
 
-  const vaultTree = React.useMemo(
-    () => buildTree(allFolders || []),
+  const { reviewDelivery, assetLibrary } = React.useMemo(
+    () => partitionProjectBinFolders(allFolders || []),
     [allFolders],
   );
-  const cloudTree = vaultTree;
+  const cloudTree = React.useMemo(
+    () => buildTree(reviewDelivery),
+    [reviewDelivery],
+  );
+  const vaultTree = React.useMemo(
+    () => buildTree(assetLibrary),
+    [assetLibrary],
+  );
 
   useEffect(() => {
     if (!currentFolder) return;
@@ -514,7 +533,7 @@ export default function VaultSidebar({
                 <TreeSection
                   emoji="☁"
                   title="Review & Delivery"
-                  subtitle="Review versions and final delivery"
+                  subtitle="Versions · lock · delivery"
                   accentClass="text-[#d4af37]"
                   isExpanded={cloudSectionOpen}
                   onToggle={toggleCloudSection}
@@ -534,7 +553,7 @@ export default function VaultSidebar({
                     onFolderClick={handleCloudFolder}
                     onDeleteFolder={onDeleteFolder}
                     showDelete={false}
-                    emptyLabel="No review folders yet"
+                    emptyLabel="No review / delivery folders yet"
                     baseDepth={1}
                     isTreeActive={activeBin === "cloud"}
                   />
@@ -543,7 +562,7 @@ export default function VaultSidebar({
                 <TreeSection
                   emoji="📦"
                   title="Asset Library"
-                  subtitle="Source and working assets"
+                  subtitle="Source · materials · working"
                   accentClass="text-[#d4af37]"
                   isExpanded={vaultSectionOpen}
                   onToggle={toggleVaultSection}

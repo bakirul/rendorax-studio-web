@@ -787,6 +787,7 @@ When assisting with this project, keep these constraints in mind:
 | 2026-07-17 | Marketing site mobile layout polish | Safer 320–430px wrapping, touch targets, spacing, journey overflow, nav/menu; no copy/SEO/backend changes |
 | 2026-07-17 | Studio Access label + password visibility | Navbar/access role-neutral “Studio Access”; reusable PasswordField on login/reset/invite/admin/private-reel; no auth/backend changes |
 | 2026-07-17 | Phase 1 review playback transport sync | Host admin/editor Socket.IO play/pause/seek + late-join state; followers follow; leave-room; ephemeral in-memory host; no Cinema/schema changes |
+| 2026-07-17 | Professional Review Workspace Phase 1 UX | Video-dominant preview; Review Summary + status banner + stronger approval; Review Feedback panel; sidebar polish; no workflow/API changes |
 
 | Date | Decision | Rationale |
 |------|----------|-----------|

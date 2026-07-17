@@ -38,8 +38,9 @@ import {
 } from "@/utils/projectAssetFolders";
 import { sanitizeAbsoluteMediaUrl } from "@/utils/mediaAssets";
 import CloudAssetGallery from "@/components/dashboard/CloudAssetGallery";
-import ReviewDecisionBar from "@/components/dashboard/ReviewDecisionBar";
-import PictureLockBar from "@/components/dashboard/PictureLockBar";
+import ReviewActionsStrip from "@/components/dashboard/ReviewActionsStrip";
+import WorkspaceContext from "@/components/dashboard/WorkspaceContext";
+import ProjectSummarySection from "@/components/dashboard/ProjectSummarySection";
 import MasterDeliveryBar, {
   type PendingMasterDeliveryRegister,
 } from "@/components/dashboard/MasterDeliveryBar";
@@ -2249,92 +2250,28 @@ export default function DashboardPage() {
         onUploadSuccess={handleMasterDeliveryUploadSuccess}
       />
 
-      <div className="shrink-0 bg-[#0a0a0f] border-b border-white/5 px-6 py-2 flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-3 flex-wrap min-w-0">
-          <span className="text-xs font-semibold text-white tracking-wide">
-            {isEditor ? "Production Workspace" : "Review Workspace"}
-          </span>
-          <span
-            className={`text-[9px] uppercase tracking-widest font-bold px-2 py-0.5 rounded-full border shrink-0 ${
-              isEditor
-                ? "border-[#d4af37]/40 bg-[#d4af37]/10 text-[#d4af37]"
-                : "border-blue-400/40 bg-blue-400/10 text-blue-300"
-            }`}
-          >
-            {isEditor ? "Editor / Team" : "Client"}
-          </span>
-          <span className="text-[10px] text-gray-500 hidden sm:inline truncate">
-            {isEditor
-              ? "Assigned tasks, active project, live editing, uploads, review tools"
-              : "Preview assets, give feedback, join live review, approve or request revision"}
-          </span>
-        </div>
-
-        {!isEditor ? (
-          <div className="flex items-center gap-2 shrink-0">
-            {clientProjectsLoading ? (
-              <span className="text-[10px] text-gray-500 uppercase tracking-widest">
-                Loading projects…
-              </span>
-            ) : clientProjectsError ? (
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-red-400 border border-red-500/20 bg-red-500/5 px-2 py-1">
-                  {clientProjectsError}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => void loadClientProjects()}
-                  className="text-[9px] uppercase tracking-widest text-blue-300 hover:text-blue-200 transition-colors"
-                >
-                  Retry
-                </button>
-              </div>
-            ) : clientProjects.length === 0 ? (
-              <span className="text-[10px] text-gray-500 italic max-w-[280px]">
-                Upload and organize project materials here. Your production team
-                can link them to a project later.
-              </span>
-            ) : clientProjects.length === 1 ? (
-              <div className="flex items-center gap-2">
-                <span className="text-[9px] uppercase tracking-widest text-gray-500 hidden sm:inline">
-                  Project
-                </span>
-                <span className="text-[10px] text-blue-300 font-medium truncate max-w-[160px]">
-                  {clientProjects[0].title}
-                </span>
-                {clientProjects[0].status ? (
-                  <span className="text-[9px] uppercase tracking-widest text-gray-500">
-                    {clientProjects[0].status}
-                  </span>
-                ) : null}
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <span className="text-[9px] uppercase tracking-widest text-gray-500 hidden sm:inline">
-                  Project
-                </span>
-                <select
-                  value={activeProjectId}
-                  onChange={(e) => setActiveProjectId(e.target.value)}
-                  className="bg-[#121217] text-blue-300 text-[10px] px-2 py-1 border border-white/10 outline-none cursor-pointer max-w-[180px] truncate"
-                  title="Select a project to review"
-                >
-                  <option value="">Select project…</option>
-                  {clientProjects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.title}
-                      {p.status ? ` (${p.status})` : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
-        ) : null}
-      </div>
-
-      {!isEditor ? <OrganizationTeam /> : null}
-      {!isEditor ? <ClientProjectRequests /> : null}
+      <WorkspaceContext>
+        <ProjectSummarySection
+          isEditor={isEditor}
+          clientProjectsLoading={clientProjectsLoading}
+          clientProjectsError={clientProjectsError}
+          clientProjects={clientProjects}
+          activeProjectId={activeProjectId}
+          onActiveProjectChange={setActiveProjectId}
+          onRetryClientProjects={() => void loadClientProjects()}
+          availableProjects={availableProjects.map((p) => ({
+            id: p.id,
+            title: formatEditorProjectOptionLabel({
+              title: p.title,
+              client: p.client,
+            }),
+          }))}
+          assetViewScope={assetViewScope}
+          onAssetViewScopeChange={setAssetViewScope}
+        />
+        {!isEditor ? <OrganizationTeam embedded /> : null}
+        {!isEditor ? <ClientProjectRequests embedded /> : null}
+      </WorkspaceContext>
 
       {isEditor && (
         <div className="shrink-0 bg-[#0a0a0f] border-b border-white/5 relative z-10">
@@ -2367,60 +2304,11 @@ export default function DashboardPage() {
               </svg>
             </button>
 
-            {availableProjects.length > 0 && (
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="text-[9px] uppercase tracking-widest text-gray-500 hidden sm:inline">
-                  Active Project
-                </span>
-                <select
-                  value={activeProjectId}
-                  onChange={(e) => setActiveProjectId(e.target.value)}
-                  className="bg-[#121217] text-[#d4af37] text-[10px] px-2 py-1 border border-white/10 outline-none cursor-pointer max-w-[160px] truncate"
-                  title="Uploads will be linked to this project"
-                >
-                  <option value="">No project (unlinked)</option>
-                  {availableProjects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {formatEditorProjectOptionLabel({
-                        title: p.title,
-                        client: p.client,
-                      })}
-                    </option>
-                  ))}
-                </select>
-                <div className="flex border border-white/10 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setAssetViewScope("all")}
-                    className={`text-[9px] uppercase tracking-widest px-2 py-1 transition-colors ${
-                      assetViewScope === "all"
-                        ? "bg-[#d4af37]/20 text-[#d4af37]"
-                        : "text-gray-500 hover:text-gray-300"
-                    }`}
-                    title="Show only assets you uploaded"
-                  >
-                    My Uploads
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAssetViewScope("active")}
-                    disabled={!activeProjectId}
-                    className={`text-[9px] uppercase tracking-widest px-2 py-1 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
-                      assetViewScope === "active"
-                        ? "bg-[#d4af37]/20 text-[#d4af37]"
-                        : "text-gray-500 hover:text-gray-300"
-                    }`}
-                    title={
-                      activeProjectId
-                        ? "Show all assets linked to the active project"
-                        : "Select a project to view project assets"
-                    }
-                  >
-                    Project Assets
-                  </button>
-                </div>
-              </div>
-            )}
+            {editorTasksLoading ? (
+              <span className="text-[10px] text-gray-500 uppercase tracking-widest shrink-0">
+                Loading tasks…
+              </span>
+            ) : null}
           </div>
 
           {isTaskPanelExpanded && (
@@ -2567,6 +2455,8 @@ export default function DashboardPage() {
                   isNotifying={isNotifying}
                   notificationSent={notificationSent}
                   jumpToTime={jumpToTime}
+                  liveTeamMembers={[]}
+                  enableTeamInvite={!isEditor}
                 />
               </div>
             </div>
@@ -2613,7 +2503,7 @@ export default function DashboardPage() {
               className="flex flex-col lg:flex-row flex-1 overflow-hidden relative w-full min-w-0 min-h-0"
             >
               <section
-                className={`flex flex-col bg-[#050505] shrink-0 w-full max-lg:!w-full lg:shrink-0 h-auto lg:h-full min-h-0 relative transition-none custom-scrollbar ${previewFile ? "hidden lg:flex" : "flex"}`}
+                className={`flex flex-col bg-[#050505] shrink-0 w-full max-lg:!w-full lg:shrink-0 h-auto lg:h-full min-h-0 relative transition-none custom-scrollbar flex ${previewFile ? "max-lg:max-h-[34vh] max-lg:shrink-0" : ""}`}
                 style={{ width: `${leftPaneWidth}%` }}
               >
                 <div className="w-full min-h-14 flex items-center justify-between px-6 py-2 border-b border-white/5 bg-[#121217] shrink-0 z-20 relative">
@@ -2879,104 +2769,40 @@ export default function DashboardPage() {
                 className="w-[3px] bg-white/5 hover:bg-[#d4af37] cursor-col-resize z-50 shrink-0 hidden lg:block"
               />
 
-              <div className="flex flex-1 flex-col h-full min-h-0 bg-[#0a0a0f] overflow-hidden relative min-w-0 w-full">
-                {previewFile && (
-                  <button
-                    type="button"
-                    onClick={() => setPreviewFile(null)}
-                    className="lg:hidden flex items-center gap-2 px-4 py-2.5 bg-[#121217] border-b border-white/5 text-[#d4af37] text-xs font-bold uppercase tracking-widest shrink-0 z-30"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <line x1="19" y1="12" x2="5" y2="12" />
-                      <polyline points="12 19 5 12 12 5" />
-                    </svg>
-                    Back to Grid
-                  </button>
-                )}
+              <div className="flex flex-1 flex-col h-full min-h-0 bg-[#0a0a0f] overflow-hidden relative min-w-0 w-full max-lg:overflow-y-auto max-lg:custom-scrollbar">
                 {previewFile && (
                   <>
                     {previewFile.isVideo && previewFile.isCdn && (
-                      <>
-                        <div className="w-full bg-[#1c1c24] border-b border-[#d4af37]/20 px-4 py-3 flex items-center justify-between z-30 shrink-0 shadow-md">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <button
-                              onClick={() => setPreviewFile(null)}
-                              className="shrink-0 flex items-center justify-center w-7 h-7 rounded-full bg-black/60 hover:bg-red-500 text-white transition-colors border border-white/10"
-                              title="Close Preview"
+                      <div className="z-30 flex w-full shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-[#121217] px-3 py-2 sm:px-4">
+                        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                          <button
+                            onClick={() => setPreviewFile(null)}
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/10 bg-black/60 text-white transition-colors hover:bg-red-500 lg:hidden"
+                            title="Close Preview"
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="14"
+                              height="14"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
                             >
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                width="14"
-                                height="14"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                              >
-                                <line x1="18" y1="6" x2="6" y2="18" />
-                                <line x1="6" y1="6" x2="18" y2="18" />
-                              </svg>
-                            </button>
-                            <div className="min-w-0">
-                              <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-[#d4af37]">
-                                Review Preview
-                              </p>
-                              <p className="truncate text-sm text-white">{previewFile.name}</p>
-                            </div>
-                          </div>
-                          {flags?.enable_compare_mode && (
-                            <div className="flex items-center gap-2 shrink-0">
-                              {renderCompareSelect()}
-                            </div>
-                          )}
+                              <line x1="18" y1="6" x2="6" y2="18" />
+                              <line x1="6" y1="6" x2="18" y2="18" />
+                            </svg>
+                          </button>
+                          <p className="min-w-0 flex-1 truncate text-sm text-white">
+                            {previewFile.name}
+                          </p>
                         </div>
-                        {previewReviewAsset ? (
-                          <>
-                            <ReviewDecisionBar
-                              key={`decision-${previewReviewAsset.id}`}
-                              mediaAssetId={previewReviewAsset.id}
-                              viewerRole={reviewDecisionViewerRole}
-                              clientCanApprove={clientCanApproveReview}
-                              clientCanRequestRevision={
-                                clientCanRequestRevision
-                              }
-                            />
-                            <PictureLockBar
-                              key={`lock-${previewReviewAsset.id}`}
-                              mediaAssetId={previewReviewAsset.id}
-                              viewerRole={reviewDecisionViewerRole}
-                            />
-                          </>
+                        {flags?.enable_compare_mode ? (
+                          <div className="flex shrink-0 items-center gap-2">
+                            {renderCompareSelect()}
+                          </div>
                         ) : null}
-                        {showMasterDeliveryPreviewBar &&
-                        activeProjectId &&
-                        isEditor ? (
-                          <MasterDeliveryBar
-                            key={`md-preview-${activeProjectId}-${previewMasterDeliveryAsset?.id}`}
-                            agencyProjectId={activeProjectId}
-                            onUploadRequest={() =>
-                              setIsMasterDeliveryModalOpen(true)
-                            }
-                            pendingRegister={pendingMasterDeliveryRegister}
-                            onPendingRegisterCleared={() =>
-                              setPendingMasterDeliveryRegister(null)
-                            }
-                            onRegistered={() => {
-                              void fetchAndSetCloudAssets();
-                            }}
-                          />
-                        ) : null}
-                      </>
+                      </div>
                     )}
 
                     {previewFile.isVideo && !previewFile.isCdn && (
@@ -3204,6 +3030,37 @@ export default function DashboardPage() {
                           )}
                         </div>
 
+                        {previewReviewAsset && previewFile?.isCdn ? (
+                          <>
+                            <ReviewActionsStrip
+                              mediaAssetId={previewReviewAsset.id}
+                              viewerRole={reviewDecisionViewerRole}
+                              clientCanApprove={clientCanApproveReview}
+                              clientCanRequestRevision={
+                                clientCanRequestRevision
+                              }
+                            />
+                            {showMasterDeliveryPreviewBar &&
+                            activeProjectId &&
+                            isEditor ? (
+                              <MasterDeliveryBar
+                                key={`md-preview-${activeProjectId}-${previewMasterDeliveryAsset?.id}`}
+                                agencyProjectId={activeProjectId}
+                                onUploadRequest={() =>
+                                  setIsMasterDeliveryModalOpen(true)
+                                }
+                                pendingRegister={pendingMasterDeliveryRegister}
+                                onPendingRegisterCleared={() =>
+                                  setPendingMasterDeliveryRegister(null)
+                                }
+                                onRegistered={() => {
+                                  void fetchAndSetCloudAssets();
+                                }}
+                              />
+                            ) : null}
+                          </>
+                        ) : null}
+
                         <div className="shrink-0 mx-auto mt-3 w-full max-w-2xl min-w-0 flex flex-col gap-2 z-20">
                           <VideoTimelineScrubber
                             videoRef={videoRef}
@@ -3358,6 +3215,8 @@ export default function DashboardPage() {
                           isNotifying={isNotifying}
                           notificationSent={notificationSent}
                           jumpToTime={jumpToTime}
+                          liveTeamMembers={[]}
+                          enableTeamInvite={!isEditor}
                         />
                       </div>
                     </div>

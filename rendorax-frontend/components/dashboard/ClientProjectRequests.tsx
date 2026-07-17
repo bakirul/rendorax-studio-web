@@ -42,11 +42,15 @@ const labelClass =
 
 const helperClass = "mt-1 text-[10px] text-gray-600 leading-snug";
 
-export default function ClientProjectRequests() {
+export default function ClientProjectRequests({
+  embedded = false,
+}: {
+  embedded?: boolean;
+}) {
   const [requests, setRequests] = useState<ProjectRequestSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(!embedded);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
@@ -207,8 +211,16 @@ export default function ClientProjectRequests() {
   };
 
   return (
-    <div className="shrink-0 bg-[#0a0a0f] border-b border-white/5 relative z-10">
-      <div className="w-full flex items-center justify-between px-6 py-2 gap-4">
+    <div
+      className={
+        embedded
+          ? "border-b border-white/[0.04] py-1 last:border-b-0"
+          : "relative z-10 shrink-0 border-b border-white/5 bg-[#0a0a0f]"
+      }
+    >
+      <div
+        className={`flex w-full items-center justify-between gap-4 ${embedded ? "px-0 py-1" : "px-6 py-2"}`}
+      >
         <button
           type="button"
           onClick={() => setExpanded((prev) => !prev)}
@@ -252,7 +264,9 @@ export default function ClientProjectRequests() {
       </div>
 
       {expanded ? (
-        <div className="px-4 sm:px-6 pb-4 space-y-3">
+        <div
+          className={`space-y-3 ${embedded ? "pb-2 pt-1" : "px-4 pb-4 sm:px-6"}`}
+        >
           {successMessage ? (
             <p className="max-w-5xl mx-auto text-[10px] text-emerald-400 border border-emerald-400/20 bg-emerald-400/5 px-3 py-2">
               {successMessage}
