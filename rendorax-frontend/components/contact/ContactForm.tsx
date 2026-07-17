@@ -42,7 +42,7 @@ export default function ContactForm() {
   };
 
   return (
-    <div className="bg-bg-panel border border-white/5 p-8 md:p-12 relative overflow-hidden group">
+    <div className="bg-bg-panel border border-white/5 p-5 sm:p-8 md:p-12 relative overflow-hidden group">
       <div className="absolute inset-0 bg-gold-primary/5 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none"></div>
 
       {status === "success" ? (

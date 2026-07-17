@@ -31,12 +31,12 @@ export default function GuideHomePage() {
         </p>
         <div className="flex flex-wrap items-center gap-2 text-sm">
           {WORKFLOW_STEPS.map((step, index) => (
-            <span key={step} className="flex items-center gap-2">
-              <span className="text-white bg-white/5 border border-white/10 px-3 py-1.5">
+            <span key={step} className="flex items-center gap-2 max-w-full">
+              <span className="text-white bg-white/5 border border-white/10 px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm break-words">
                 {step}
               </span>
               {index < WORKFLOW_STEPS.length - 1 ? (
-                <span className="text-gold-primary/60" aria-hidden>
+                <span className="text-gold-primary/60 shrink-0" aria-hidden>
                   ↓
                 </span>
               ) : null}

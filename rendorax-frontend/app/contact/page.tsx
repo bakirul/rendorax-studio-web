@@ -14,26 +14,30 @@ export default function ContactPage() {
     <main className="min-h-screen flex flex-col bg-bg-body text-text-gray font-main overflow-x-hidden selection:bg-gold-primary selection:text-black">
       <Navbar />
 
-      <header className="relative w-full max-w-4xl mx-auto px-6 pt-32 pb-16 flex flex-col items-center text-center">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-gold-primary blur-[200px] opacity-10 -z-10 rounded-full pointer-events-none"></div>
+      <header className="relative w-full max-w-4xl mx-auto px-4 sm:px-6 pt-28 sm:pt-32 pb-12 sm:pb-16 flex flex-col items-center text-center overflow-hidden">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(100vw,360px)] sm:w-[500px] h-[min(100vw,360px)] sm:h-[500px] bg-gold-primary blur-[140px] sm:blur-[200px] opacity-10 -z-10 rounded-full pointer-events-none"></div>
 
-        <span className="text-[11px] uppercase tracking-[0.3em] text-gold-primary block mb-6 animate-pulse">
+        <span className="text-[10px] sm:text-[11px] uppercase tracking-[0.2em] sm:tracking-[0.3em] text-gold-primary block mb-5 sm:mb-6 animate-pulse">
           Initiate Protocol
         </span>
-        <h1 className="text-4xl md:text-6xl font-display leading-[1.1] mb-6 text-white">
+        <h1 className="text-3xl sm:text-4xl md:text-6xl font-display leading-[1.1] mb-5 sm:mb-6 text-white break-words">
           Start a{" "}
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-gold-primary to-[#fff]">
             Project.
           </span>
         </h1>
-        <p className="text-sm text-text-gray font-light max-w-2xl leading-relaxed">
+        <p className="text-sm text-text-gray font-light max-w-2xl leading-relaxed px-1">
           Submit your project briefing below. Our operations team reviews all
           inquiries within 24 hours to determine alignment and schedule a
           technical consultation.
         </p>
+        <p className="mt-5 sm:mt-6 text-[10px] sm:text-[11px] uppercase tracking-[0.12em] sm:tracking-[0.15em] text-text-gray/80 max-w-xl leading-relaxed px-1">
+          Client Vault access is provided after onboarding and project approval.
+          There is no public signup.
+        </p>
       </header>
 
-      <section className="w-full max-w-3xl mx-auto px-6 pb-32 flex-grow">
+      <section className="w-full max-w-3xl mx-auto px-4 sm:px-6 pb-20 sm:pb-32 flex-grow">
         <ContactForm />
       </section>
 

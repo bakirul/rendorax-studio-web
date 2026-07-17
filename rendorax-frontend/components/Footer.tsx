@@ -2,8 +2,8 @@ import Link from "next/link";
 
 export default function Footer() {
   return (
-    <footer className="w-full bg-black border-t border-white/5 py-12 mt-20 relative z-10">
-      <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
+    <footer className="w-full bg-black border-t border-white/5 py-10 sm:py-12 mt-12 sm:mt-20 relative z-10 overflow-x-hidden">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col md:flex-row justify-between items-center gap-6">
         {/* Left Side: Brand & Copyright */}
         <div className="flex flex-col items-center md:items-start gap-2">
           <div className="flex items-center gap-2">
@@ -16,14 +16,14 @@ export default function Footer() {
               Rendorax
             </span>
           </div>
-          <p className="text-[10px] uppercase tracking-widest text-text-gray mt-1">
+          <p className="text-[10px] uppercase tracking-widest text-text-gray mt-1 text-center md:text-left">
             © {new Date().getFullYear()} Rendorax Limited. All rights
             reserved.
           </p>
         </div>
 
         {/* Center Side: Public & Legal Links */}
-        <div className="flex flex-wrap justify-center gap-6 md:gap-8 text-[11px] uppercase tracking-[0.2em] font-medium">
+        <div className="flex flex-wrap justify-center gap-x-5 gap-y-3 sm:gap-6 md:gap-8 text-[10px] sm:text-[11px] uppercase tracking-[0.14em] sm:tracking-[0.2em] font-medium max-w-full">
           <Link
             href="/guide"
             className="text-text-gray hover:text-gold-primary transition-colors"

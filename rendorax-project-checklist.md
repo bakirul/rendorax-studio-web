@@ -782,6 +782,9 @@ When assisting with this project, keep these constraints in mind:
 |------|----------|-----------|
 | 2026-07-17 | Guide Center docs aligned with homepage Real-Time Collaboration messaging | Documentation-only: `/guide/client/review-comments` pillars + workflow Review link + FAQ; no product/API/homepage changes |
 | 2026-07-17 | Guide collaboration copy corrected for translation boundary | Document verified automatic **text** chat/direction translation only; do not claim automatic video/voice/spoken translation until verified |
+| 2026-07-17 | Homepage onboarding path clarified for visitors | Compact “How projects begin” after Client Vault; Contact note; no public signup; CTA “Discuss Your Project” |
+| 2026-07-17 | Homepage subtle interaction polish | CSS + one-time IntersectionObserver reveals; hover lift on cards; prefers-reduced-motion; no copy/API changes |
+| 2026-07-17 | Marketing site mobile layout polish | Safer 320–430px wrapping, touch targets, spacing, journey overflow, nav/menu; no copy/SEO/backend changes |
 
 | Date | Decision | Rationale |
 |------|----------|-----------|
