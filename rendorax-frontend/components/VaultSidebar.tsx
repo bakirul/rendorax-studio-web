@@ -157,21 +157,21 @@ const FolderNode = ({
           paddingRight: "6px",
         }}
       >
-        <div className="flex min-w-0 flex-1 items-center py-1.5">
+        <div className="flex min-w-0 flex-1 items-center py-1.5 max-lg:min-h-11">
           {hasChildren ? (
             <button
               onClick={(e) => toggleExpand(node.path, e)}
-              className="mr-1 shrink-0 p-0.5 text-gray-500 transition-colors hover:text-white"
+              className="mr-1 flex shrink-0 items-center justify-center p-0.5 text-gray-500 transition-colors hover:text-white max-lg:h-11 max-lg:w-11"
             >
               <Chevron expanded={isExpanded} />
             </button>
           ) : (
-            <div className="mr-1 h-[18px] w-[18px] shrink-0" />
+            <div className="mr-1 h-[18px] w-[18px] shrink-0 max-lg:h-11 max-lg:w-11" />
           )}
 
           <button
             onClick={() => onFolderClick(`${node.path}/`)}
-            className="flex min-w-0 flex-1 items-center gap-2 truncate text-left"
+            className="flex min-w-0 flex-1 items-center gap-2 truncate text-left max-lg:min-h-11"
             title={node.path}
           >
             <span className="shrink-0 text-sm">📁</span>
@@ -185,7 +185,7 @@ const FolderNode = ({
               e.stopPropagation();
               onDeleteFolder(node.path);
             }}
-            className="shrink-0 p-1 text-gray-500 opacity-0 transition-all hover:text-red-400 group-hover/folder:opacity-100"
+            className="flex shrink-0 items-center justify-center p-1 text-gray-500 opacity-0 transition-all hover:text-red-400 group-hover/folder:opacity-100 max-lg:h-11 max-lg:w-11 max-lg:opacity-100"
             title="Delete Folder"
           >
             <svg
@@ -249,7 +249,7 @@ function TreeSection({
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left transition-colors hover:bg-white/[0.04]"
+        className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left transition-colors hover:bg-white/[0.04] max-lg:min-h-11"
       >
         <Chevron expanded={isExpanded} />
         <span className="shrink-0 text-xs opacity-70" aria-hidden>
@@ -289,7 +289,7 @@ function LeafNode({
   return (
     <button
       onClick={onClick}
-      className={`flex w-full items-center gap-2 rounded-md py-1.5 text-[11px] transition-colors ${
+      className={`flex w-full items-center gap-2 rounded-md py-1.5 text-[11px] transition-colors max-lg:min-h-11 ${
         isActive
           ? "border border-[#d4af37]/35 bg-[#d4af37]/12 text-[#d4af37]"
           : "border border-transparent text-gray-500 hover:bg-white/5 hover:text-gray-300"
@@ -465,7 +465,7 @@ export default function VaultSidebar({
         </h3>
         <button
           onClick={onCreateFolder}
-          className="text-[#d4af37] transition-colors hover:text-white"
+          className="flex items-center justify-center text-[#d4af37] transition-colors hover:text-white max-lg:h-11 max-lg:w-11"
           title="New Project Assets Folder"
         >
           <svg
@@ -495,7 +495,7 @@ export default function VaultSidebar({
           <button
             type="button"
             onClick={() => setClientVaultOpen((open) => !open)}
-            className="shrink-0 p-0.5 text-gray-500 transition-colors hover:text-white"
+            className="flex shrink-0 items-center justify-center p-0.5 text-gray-500 transition-colors hover:text-white max-lg:h-11 max-lg:w-11"
             aria-label="Toggle Project Assets"
           >
             <Chevron expanded={clientVaultOpen} />

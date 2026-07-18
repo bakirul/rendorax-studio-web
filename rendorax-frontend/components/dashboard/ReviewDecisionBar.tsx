@@ -176,7 +176,7 @@ export default function ReviewDecisionBar({
     <div
       className={`w-full shrink-0 ${
         compact
-          ? "bg-transparent px-3 py-2 sm:px-4"
+          ? "bg-transparent px-3 py-1.5 sm:px-4"
           : "border-b border-[#d4af37]/15 bg-[#14141c] px-4 py-3"
       }`}
     >

@@ -16,6 +16,7 @@ import { useGlobalStore } from "@/store/useGlobalStore";
 // Components
 import Navbar from "@/components/Navbar";
 import VaultSidebar from "@/components/VaultSidebar";
+import MobileAssetDrawer from "@/components/dashboard/MobileAssetDrawer";
 import CommentsPanel from "@/components/CommentsPanel";
 import DashboardHeader from "@/components/DashboardHeader";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -1184,7 +1185,7 @@ export default function DashboardPage() {
   );
 
   useEffect(() => {
-    setIsSidebarOpen(window.innerWidth >= 768);
+    setIsSidebarOpen(window.innerWidth >= 1024);
   }, [setIsSidebarOpen]);
 
   const loadEditorTasks = useCallback(async () => {
@@ -2071,6 +2072,12 @@ export default function DashboardPage() {
       effectiveProjectAssetClass === "master_delivery",
   );
 
+  const mobileAssetCount = isClientVaultRootSelected
+    ? folders.length
+    : activeBin === "cloud"
+      ? classifiedCloudAssets.length
+      : filteredFiles.length + folders.length;
+
   const clientProjectHasNoAssets =
     !isEditor &&
     Boolean(activeProjectId) &&
@@ -2417,14 +2424,14 @@ export default function DashboardPage() {
 
       <div
         id="main-workspace-container"
-        className="flex flex-col md:flex-row flex-1 overflow-hidden relative min-h-0 w-full"
+        className="flex flex-col lg:flex-row flex-1 overflow-hidden relative min-h-0 w-full"
       >
         {isLiveStreaming ? (
           <div className="flex flex-col lg:flex-row flex-1 overflow-hidden relative w-full min-h-0">
             <TimelineShareWidget cinemaVideoRef={cinemaVideoRef} socket={socket} isEditor={isEditor} />
 
             <div
-              className="relative flex max-md:min-h-[300px] md:min-h-[500px] flex-shrink-0 flex-col border-t border-white/5 bg-[#121217] w-full lg:h-full lg:min-h-0 lg:w-[var(--comments-sidebar-w)] lg:border-l lg:border-t-0 z-40"
+              className="relative flex flex-shrink-0 flex-col border-t border-white/5 bg-[#121217] w-full max-lg:h-auto lg:h-full lg:min-h-0 lg:w-[var(--comments-sidebar-w)] lg:border-l lg:border-t-0 z-40"
               style={{
                 ["--comments-sidebar-w" as string]: `${commentsSidebarWidth}px`,
                 flexShrink: 0,
@@ -2434,7 +2441,7 @@ export default function DashboardPage() {
                 onMouseDown={startResizingCommentsSidebar}
                 className="absolute left-0 top-0 bottom-0 z-50 hidden w-1 cursor-col-resize hover:bg-[#d4af37]/40 lg:block"
               />
-              <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col min-h-0">
+              <div className="custom-scrollbar flex flex-col min-h-0 lg:flex-1 lg:overflow-y-auto max-lg:overflow-visible">
                 <CommentsPanel
                   disabled={!clientCanComment}
                   disabledPlaceholder={
@@ -2463,24 +2470,18 @@ export default function DashboardPage() {
           </div>
         ) : (
           <>
-            {isSidebarOpen && (
-              <div
-                className="fixed inset-0 bg-black/60 z-30 md:hidden transition-opacity duration-300"
-                onClick={() => setIsSidebarOpen(false)}
-              />
-            )}
-
+            {/* Desktop (lg+): permanent, resizable Project Bin sidebar — unchanged behavior. */}
             <div
               className={`
-                fixed md:relative inset-y-0 left-0 z-40 md:z-20
+                hidden lg:relative lg:block lg:z-20
                 h-full shrink-0 bg-[#0a0a0f] border-r border-white/5
                 ${isSidebarOpen && !isResizingSidebar.current ? "transition-all duration-300 ease-in-out" : ""}
                 ${isSidebarOpen 
                   ? "translate-x-0 opacity-100" 
-                  : "md:w-0 -translate-x-full md:translate-x-0 md:opacity-0 overflow-hidden md:border-r-0 pointer-events-none"
+                  : "lg:w-0 lg:opacity-0 overflow-hidden lg:border-r-0 pointer-events-none"
                 }
               `}
-              style={{ width: isSidebarOpen ? (typeof window !== "undefined" && window.innerWidth >= 768 ? sidebarWidth + "px" : "240px") : "0px" }}
+              style={{ width: isSidebarOpen ? sidebarWidth + "px" : "0px" }}
             >
               <VaultSidebar
                 currentFolder={currentFolder}
@@ -2494,16 +2495,30 @@ export default function DashboardPage() {
               />
               <div
                 onMouseDown={startResizingSidebar}
-                className="absolute top-0 right-0 w-[4px] h-full cursor-col-resize hover:bg-[#d4af37]/50 active:bg-[#d4af37] z-50 hidden md:block transition-colors"
+                className="absolute top-0 right-0 w-[4px] h-full cursor-col-resize hover:bg-[#d4af37]/50 active:bg-[#d4af37] z-50 hidden lg:block transition-colors"
               />
             </div>
 
+            {/* Mobile (<lg): collapsed drawer trigger + bottom sheet. Gallery
+                stays visible at all times; selecting a folder auto-closes it. */}
+            <MobileAssetDrawer
+              currentFolder={currentFolder}
+              activeBin={activeBin}
+              allFolders={allFolders}
+              assetCount={mobileAssetCount}
+              onFolderClick={setCurrentFolder}
+              onClientVaultRootClick={handleClientVaultRoot}
+              onBinChange={setActiveBin}
+              onCreateFolder={handleCreateFolder}
+              onDeleteFolder={onDeleteFolderUI}
+            />
+
             <div
               id="grid-preview-container"
-              className="flex flex-col lg:flex-row flex-1 overflow-hidden relative w-full min-w-0 min-h-0"
+              className="flex flex-col lg:flex-row flex-1 relative w-full min-w-0 min-h-0 lg:overflow-hidden max-lg:block max-lg:overflow-y-auto max-lg:custom-scrollbar"
             >
               <section
-                className={`flex flex-col bg-[#050505] shrink-0 w-full max-lg:!w-full lg:shrink-0 h-auto lg:h-full min-h-0 relative transition-none custom-scrollbar flex ${previewFile ? "max-lg:max-h-[34vh] max-lg:shrink-0" : ""}`}
+                className={`flex flex-col bg-[#050505] shrink-0 w-full max-lg:!w-full lg:shrink-0 h-auto lg:h-full min-h-0 relative transition-none custom-scrollbar flex max-lg:shrink-0 ${previewFile ? "max-lg:max-h-[34vh]" : "max-lg:max-h-[46vh]"}`}
                 style={{ width: `${leftPaneWidth}%` }}
               >
                 <div className="w-full min-h-14 flex items-center justify-between px-6 py-2 border-b border-white/5 bg-[#121217] shrink-0 z-20 relative">
@@ -2769,7 +2784,7 @@ export default function DashboardPage() {
                 className="w-[3px] bg-white/5 hover:bg-[#d4af37] cursor-col-resize z-50 shrink-0 hidden lg:block"
               />
 
-              <div className="flex flex-1 flex-col h-full min-h-0 bg-[#0a0a0f] overflow-hidden relative min-w-0 w-full max-lg:overflow-y-auto max-lg:custom-scrollbar">
+              <div className="flex flex-col bg-[#0a0a0f] relative min-w-0 w-full lg:flex-1 lg:h-full lg:min-h-0 lg:overflow-hidden max-lg:block">
                 {previewFile && (
                   <>
                     {previewFile.isVideo && previewFile.isCdn && (
@@ -2793,9 +2808,14 @@ export default function DashboardPage() {
                               <line x1="6" y1="6" x2="18" y2="18" />
                             </svg>
                           </button>
-                          <p className="min-w-0 flex-1 truncate text-sm text-white">
-                            {previewFile.name}
-                          </p>
+                          <div className="flex min-w-0 flex-1 flex-col justify-center">
+                            <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-gray-500">
+                              Review Preview
+                            </span>
+                            <p className="min-w-0 truncate text-sm font-medium text-white">
+                              {previewFile.name}
+                            </p>
+                          </div>
                         </div>
                         {flags?.enable_compare_mode ? (
                           <div className="flex shrink-0 items-center gap-2">
@@ -2957,13 +2977,13 @@ export default function DashboardPage() {
                   </>
                 )}
 
-                <section className="flex flex-1 w-full min-h-0 flex-col overflow-hidden lg:flex-row">
-                    <div className="flex min-h-[40vh] min-w-0 flex-1 flex-col overflow-hidden lg:min-h-0">
-                      <div className="flex min-h-0 min-w-0 flex-1 flex-row overflow-hidden">
-                      <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden p-2 lg:p-4">
-                        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                <section className="flex flex-1 w-full min-h-0 flex-col overflow-hidden max-lg:block lg:flex-row">
+                    <div className="flex min-h-[40vh] min-w-0 flex-1 flex-col overflow-hidden max-lg:block max-lg:min-h-0 lg:min-h-0">
+                      <div className="flex min-h-0 min-w-0 flex-1 flex-row overflow-hidden max-lg:block">
+                      <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden p-2 max-lg:block lg:p-4">
+                        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden max-lg:block">
                           {!previewFile ? (
-                            <div className="flex flex-1 flex-col items-center justify-center w-full h-full text-gray-500 bg-[#0a0a0f] relative overflow-hidden rounded-lg border border-white/5">
+                            <div className="flex flex-1 flex-col items-center justify-center w-full h-full text-gray-500 bg-[#0a0a0f] relative overflow-hidden rounded-lg border border-white/5 max-lg:min-h-[200px]">
                               <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-white/5 via-transparent to-transparent opacity-50 pointer-events-none" />
                               <span className="text-6xl mb-6 opacity-20 drop-shadow-2xl">🎞️</span>
                               <p className="text-xs font-bold tracking-widest uppercase text-gray-500/50">
@@ -2977,10 +2997,10 @@ export default function DashboardPage() {
                               imageClassName={`bg-black rounded shadow-2xl border border-white/5 ${playerSizeClass} ${aspectClass} ${objectFitClass}`}
                               videoPreview={
                             <div
-                              className={`flex flex-1 w-full h-full justify-center items-center ${flags?.enable_compare_mode && isCompareMode ? "flex-col sm:flex-row gap-4" : "flex-col"} min-h-0 min-w-0`}
+                              className={`flex flex-1 w-full h-full justify-center items-center ${flags?.enable_compare_mode && isCompareMode ? "flex-col sm:flex-row gap-4" : "flex-col"} min-h-0 min-w-0 max-lg:!h-auto`}
                             >
                               <div
-                                className={`relative flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center overflow-hidden ${playerSizeClass} ${aspectClass}`}
+                                className={`relative flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center overflow-hidden ${playerSizeClass} ${aspectClass} max-lg:!h-auto max-lg:!w-full max-lg:!flex-none max-lg:max-h-[80vh]`}
                               >
                                 {flags?.enable_compare_mode && isCompareMode && (
                                     <span className="absolute top-2 left-2 bg-black/80 text-[#d4af37] text-[10px] px-2 py-1 rounded backdrop-blur border border-white/10 z-10 font-bold tracking-widest shadow-lg">
@@ -3006,7 +3026,7 @@ export default function DashboardPage() {
                                 isCompareMode &&
                                 compareFile && (
                                   <div
-                                    className={`relative flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center overflow-hidden ${playerSizeClass} ${aspectClass}`}
+                                    className={`relative flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center overflow-hidden ${playerSizeClass} ${aspectClass} max-lg:!h-auto max-lg:!w-full max-lg:!flex-none max-lg:max-h-[80vh]`}
                                   >
                                     <span className="absolute top-2 left-2 bg-black/80 text-gray-300 text-[10px] px-2 py-1 rounded backdrop-blur border border-white/10 z-10 font-bold tracking-widest shadow-lg">
                                       V1 (Reference)
@@ -3175,14 +3195,14 @@ export default function DashboardPage() {
                         </div>
                       </div>
 
-                      <div className="shrink-0 w-16 h-full hidden md:flex flex-col justify-center border-l border-white/5 bg-[#0a0a0f] p-2 z-20">
+                      <div className="shrink-0 w-16 h-full hidden lg:flex flex-col justify-center border-l border-white/5 bg-[#0a0a0f] p-2 z-20">
                         <LUFSMeter lufs={meterLufs} />
                       </div>
                       </div>
                     </div>
 
                     <div
-                      className="relative flex max-md:min-h-[300px] md:min-h-[500px] flex-shrink-0 flex-col border-t border-white/5 bg-[#121217] w-full lg:h-full lg:min-h-0 lg:w-[var(--comments-sidebar-w)] lg:border-l lg:border-t-0 z-40"
+                      className="relative flex flex-shrink-0 flex-col border-t border-white/5 bg-[#121217] w-full max-lg:h-auto lg:h-full lg:min-h-0 lg:w-[var(--comments-sidebar-w)] lg:border-l lg:border-t-0 z-40"
                       style={{
                         ["--comments-sidebar-w" as string]: `${commentsSidebarWidth}px`,
                         flexShrink: 0,
@@ -3192,7 +3212,7 @@ export default function DashboardPage() {
                         onMouseDown={startResizingCommentsSidebar}
                         className="absolute left-0 top-0 bottom-0 z-50 hidden w-1 cursor-col-resize hover:bg-[#d4af37]/40 lg:block"
                       />
-                      <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col min-h-0">
+                      <div className="custom-scrollbar flex flex-col min-h-0 lg:flex-1 lg:overflow-y-auto max-lg:overflow-visible">
                         <CommentsPanel
                           disabled={
                             playerControlsDisabled || !clientCanComment

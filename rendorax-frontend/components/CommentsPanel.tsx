@@ -91,7 +91,7 @@ export default function CommentsPanel({
   }, [comments, filter]);
 
   return (
-    <aside className="z-10 flex h-full w-full shrink-0 flex-col border-l border-white/5 bg-[#121217] shadow-[-10px_0_30px_rgba(0,0,0,0.5)]">
+    <aside className="z-10 flex h-full w-full shrink-0 flex-col border-l border-white/5 bg-[#121217] shadow-[-10px_0_30px_rgba(0,0,0,0.5)] max-lg:h-auto">
       <div className="flex h-12 shrink-0 items-center justify-between border-b border-white/5 bg-[#121217] px-4">
         <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-100">
           Review Feedback
@@ -146,7 +146,7 @@ export default function CommentsPanel({
               key={key}
               type="button"
               onClick={() => setFilter(key)}
-              className={`rounded px-2 py-1 text-[9px] uppercase tracking-widest transition-colors ${
+              className={`flex items-center rounded px-2 py-1 text-[9px] uppercase tracking-widest transition-colors max-lg:min-h-11 max-lg:px-3 ${
                 filter === key
                   ? "bg-[#d4af37]/10 text-[#d4af37]"
                   : "text-zinc-500 hover:text-zinc-300"
@@ -158,9 +158,9 @@ export default function CommentsPanel({
         </div>
       )}
 
-      <div className="custom-scrollbar flex-1 space-y-3 overflow-y-auto p-3">
+      <div className="custom-scrollbar space-y-3 p-3 lg:flex-1 lg:overflow-y-auto max-lg:overflow-visible">
         {visibleComments.length === 0 ? (
-          <div className="flex h-full items-center justify-center px-4 text-center text-xs leading-relaxed text-gray-500">
+          <div className="flex h-full items-center justify-center px-4 text-center text-xs leading-relaxed text-gray-500 max-lg:h-auto max-lg:py-10">
             {disabled
               ? "Select a video to view or add comments"
               : filter !== "all" && comments.length > 0
@@ -249,7 +249,7 @@ export default function CommentsPanel({
                     onClick={() =>
                       handleEditComment(comment.id, comment.comment_text)
                     }
-                    className="rounded p-1 text-zinc-500 transition-colors hover:text-[#d4af37]"
+                    className="flex items-center justify-center rounded p-1 text-zinc-500 transition-colors hover:text-[#d4af37] max-lg:h-11 max-lg:w-11"
                     title="Edit"
                   >
                     <svg
@@ -268,7 +268,7 @@ export default function CommentsPanel({
                   </button>
                   <button
                     onClick={() => handleDeleteComment(comment.id)}
-                    className="rounded p-1 text-zinc-500 transition-colors hover:text-red-500"
+                    className="flex items-center justify-center rounded p-1 text-zinc-500 transition-colors hover:text-red-500 max-lg:h-11 max-lg:w-11"
                     title="Delete"
                   >
                     <svg

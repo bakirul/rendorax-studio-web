@@ -101,7 +101,7 @@ export default function DashboardHeader({
         <div className="flex items-center gap-3">
           <button
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="text-gray-400 hover:text-white transition-colors focus:outline-none p-1.5 -ml-1 rounded hover:bg-white/5"
+            className="hidden lg:inline-flex text-gray-400 hover:text-white transition-colors focus:outline-none p-1.5 -ml-1 rounded hover:bg-white/5"
             aria-label="Toggle Sidebar"
           >
             <svg

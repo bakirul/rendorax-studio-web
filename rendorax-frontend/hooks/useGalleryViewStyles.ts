@@ -44,13 +44,16 @@ export function useGalleryViewStyles(options?: UseGalleryViewStylesOptions) {
       "flex flex-col gap-2 transition-all duration-300 ease-in-out";
   } else if (viewMode === "grid-sm") {
     const minWidth = scaledGridMinWidth(GRID_SM_BASE_PX, thumbnailSizePercent);
+    // min() caps the column floor to ~44% of viewport width so at least 2
+    // columns always fit on narrow / mobile screens, while still honoring
+    // the pixel-based minimum on larger viewports.
     gridStyle = {
-      gridTemplateColumns: `repeat(auto-fill, minmax(${minWidth}px, 1fr))`,
+      gridTemplateColumns: `repeat(auto-fill, minmax(min(${minWidth}px, 44vw), 1fr))`,
     };
   } else {
     const minWidth = scaledGridMinWidth(GRID_LG_BASE_PX, thumbnailSizePercent);
     gridStyle = {
-      gridTemplateColumns: `repeat(auto-fill, minmax(${minWidth}px, 1fr))`,
+      gridTemplateColumns: `repeat(auto-fill, minmax(min(${minWidth}px, 44vw), 1fr))`,
     };
   }
 

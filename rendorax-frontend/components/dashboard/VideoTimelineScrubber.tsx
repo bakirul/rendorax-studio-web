@@ -165,16 +165,33 @@ export default function VideoTimelineScrubber({
       <div className="relative w-full">
         {showMarkers &&
           markerItems.map((comment) => (
-            <button
+            <div
               key={comment.id}
-              type="button"
-              className="absolute top-1/2 z-20 flex h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-[#0a0a0f] bg-[#d4af37] shadow-[0_0_0_1px_rgba(212,175,55,0.45)] transition-transform hover:scale-125 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#d4af37] focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0f]"
+              className="group absolute top-1/2 z-20 -translate-x-1/2 -translate-y-1/2"
               style={{ left: `${comment.percent}%` }}
-              title={`${formatClock(comment.time_stamp)} — ${truncateText(comment.comment_text)}`}
-              aria-label={`Jump to comment at ${formatClock(comment.time_stamp)}: ${truncateText(comment.comment_text, 120)}`}
-              onClick={(event) => handleMarkerClick(event, comment.time_stamp)}
-              onPointerDown={(event) => event.stopPropagation()}
-            />
+            >
+              <button
+                type="button"
+                className="flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 border-[#0a0a0f] bg-[#d4af37] shadow-[0_0_0_1px_rgba(212,175,55,0.45)] transition-transform hover:scale-125 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#d4af37] focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0f]"
+                aria-label={`Jump to comment at ${formatClock(comment.time_stamp)}: ${truncateText(comment.comment_text, 120)}`}
+                onClick={(event) => handleMarkerClick(event, comment.time_stamp)}
+                onPointerDown={(event) => event.stopPropagation()}
+              />
+              {/* Desktop-only rich hover tooltip; native title attr above still
+                  covers touch / smaller breakpoints. */}
+              <div
+                className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 hidden -translate-x-1/2 whitespace-nowrap rounded-md border border-white/10 bg-[#050505] px-2.5 py-1.5 text-left opacity-0 shadow-xl transition-opacity duration-150 group-hover:opacity-100 lg:block"
+                aria-hidden
+              >
+                <p className="font-mono text-[10px] font-semibold text-[#d4af37]">
+                  {formatClock(comment.time_stamp)}
+                </p>
+                <p className="max-w-[220px] truncate text-[11px] text-gray-200">
+                  {truncateText(comment.comment_text, 60)}
+                </p>
+                <div className="absolute left-1/2 top-full h-2 w-2 -translate-x-1/2 -translate-y-1/2 rotate-45 border border-white/10 border-t-0 border-l-0 bg-[#050505]" />
+              </div>
+            </div>
           ))}
         <input
           type="range"
