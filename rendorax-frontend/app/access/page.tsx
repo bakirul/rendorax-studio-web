@@ -148,6 +148,47 @@ export default function AccessPage() {
             )}
           </button>
         </form>
+
+        <div className="mt-10 flex flex-col gap-6 relative z-10">
+          {/* Studio Access request — invite-only, no public signup */}
+          <div className="flex items-center gap-4">
+            <div className="h-px flex-1 bg-white/10" />
+            <span className="text-[9px] uppercase tracking-[0.3em] text-text-gray/70 font-mono whitespace-nowrap">
+              Need Studio Access?
+            </span>
+            <div className="h-px flex-1 bg-white/10" />
+          </div>
+
+          <Link
+            href="/contact?topic=studio-access"
+            className="w-full border border-white/15 text-white font-bold uppercase tracking-widest py-4 text-xs text-center hover:border-gold-primary hover:text-gold-primary transition-colors duration-300"
+          >
+            Request an Invitation
+          </Link>
+
+          <div className="flex items-center gap-4">
+            <div className="h-px flex-1 bg-white/10" />
+            <span className="text-[9px] uppercase tracking-[0.3em] text-text-gray/70 font-mono whitespace-nowrap">
+              Want to explore first?
+            </span>
+            <div className="h-px flex-1 bg-white/10" />
+          </div>
+
+          <div className="flex flex-col items-center gap-4">
+            <Link
+              href="/guide/demo"
+              className="text-[11px] uppercase tracking-[0.2em] text-gold-primary hover:text-white transition-colors"
+            >
+              Explore Interactive Demo
+            </Link>
+            <Link
+              href="/guide"
+              className="text-[11px] uppercase tracking-[0.2em] text-text-gray hover:text-white transition-colors"
+            >
+              Watch Product Overview
+            </Link>
+          </div>
+        </div>
       </div>
       </div>
     </main>
