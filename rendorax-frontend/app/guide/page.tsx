@@ -6,6 +6,9 @@ export const metadata: Metadata = {
   title: "Guide Center | Rendorax Studio",
   description:
     "Learn how Clients, Editors, and Admins use Rendorax Studio from Project through Delivery and Archive.",
+  alternates: {
+    canonical: "/guide",
+  },
 };
 
 export default function GuideHomePage() {
