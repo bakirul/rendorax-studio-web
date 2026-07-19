@@ -25,10 +25,22 @@ export default function Footer() {
         {/* Center Side: Public & Legal Links */}
         <div className="flex flex-wrap justify-center gap-x-5 gap-y-3 sm:gap-6 md:gap-8 text-[10px] sm:text-[11px] uppercase tracking-[0.14em] sm:tracking-[0.2em] font-medium max-w-full">
           <Link
+            href="/services"
+            className="text-text-gray hover:text-gold-primary transition-colors"
+          >
+            Services
+          </Link>
+          <Link
             href="/guide"
             className="text-text-gray hover:text-gold-primary transition-colors"
           >
             Guide
+          </Link>
+          <Link
+            href="/contact"
+            className="text-text-gray hover:text-gold-primary transition-colors"
+          >
+            Contact
           </Link>
           <Link
             href="/career"

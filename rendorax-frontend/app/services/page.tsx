@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import Link from "next/link";
+import { SERVICE_SLUGS, SERVICES } from "@/utils/servicesContent";
 
 export const metadata: Metadata = {
   title: "Services | Rendorax Studio",
@@ -35,11 +36,6 @@ export default function ServicesPage() {
       title: "Audio Mastering",
       desc: "Broadcast-safe loudness tracking and strict LUFS-compliant mixing for all platforms.",
       href: "/services/audio-mastering",
-    },
-    {
-      title: "Color Grading",
-      desc: "Advanced look development, skin-tone preservation, and Rec.709/HDR conversions.",
-      href: "/services/color-grading",
     },
     {
       title: "Motion & VFX",
@@ -79,7 +75,51 @@ export default function ServicesPage() {
         </p>
       </header>
 
+      <section className="w-full max-w-7xl mx-auto px-6 pb-20">
+        <div className="mb-10 flex flex-col items-start gap-2">
+          <span className="text-[11px] uppercase tracking-[0.3em] text-gold-primary">
+            Core Services
+          </span>
+          <h2 className="text-2xl md:text-3xl font-display text-white">
+            Post-Production, End to End
+          </h2>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {SERVICE_SLUGS.map((slug) => {
+            const service = SERVICES[slug];
+            return (
+              <Link
+                key={slug}
+                href={`/services/${slug}`}
+                className="group flex flex-col bg-bg-panel p-10 border border-white/5 hover:border-gold-primary/50 transition-all duration-400 cursor-pointer"
+              >
+                <h3 className="text-2xl font-display text-white mb-4">
+                  {service.navLabel}
+                </h3>
+                <p className="text-sm text-text-gray leading-relaxed flex-grow mb-8">
+                  {service.cardDesc}
+                </p>
+                <div className="flex items-center text-[10px] text-gold-primary uppercase tracking-[0.2em] font-bold opacity-70 group-hover:opacity-100 transition-opacity duration-300">
+                  Explore Service
+                  <span className="ml-2 transform transition-transform duration-300 group-hover:translate-x-2">
+                    →
+                  </span>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+
       <section className="w-full max-w-7xl mx-auto px-6 pb-32 flex-grow">
+        <div className="mb-10 flex flex-col items-start gap-2">
+          <span className="text-[11px] uppercase tracking-[0.3em] text-gold-primary">
+            Specialized Disciplines
+          </span>
+          <h2 className="text-2xl md:text-3xl font-display text-white">
+            Focused Craft Areas
+          </h2>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {services.map((service, index) => (
             <Link

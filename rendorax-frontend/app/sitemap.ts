@@ -2,13 +2,24 @@ import { MetadataRoute } from "next";
 
 const BASE_URL = "https://www.rendorax.com";
 
+// Core SEO service pages (dedicated routes under app/services/<slug>/).
+const CORE_SERVICE_SLUGS = [
+  "broadcast-post-production",
+  "video-editing",
+  "color-grading",
+  "audio-post-production",
+  "quality-control",
+  "localization",
+] as const;
+
+// Specialized discipline pages served by app/services/[slug]/.
+// (color-grading is promoted to CORE_SERVICE_SLUGS above.)
 const SERVICE_SLUGS = [
   "broadcast-editing",
   "web-series-drama",
   "corporate-commercial",
   "animation-dub",
   "audio-mastering",
-  "color-grading",
   "motion-vfx",
   "archival-restoration",
   "podcast-editing",
@@ -118,6 +129,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "monthly",
       priority: 0.7,
     },
+    ...CORE_SERVICE_SLUGS.map((slug) => ({
+      url: `${BASE_URL}/services/${slug}`,
+      lastModified,
+      changeFrequency: "monthly" as const,
+      priority: 0.9,
+    })),
     ...SERVICE_SLUGS.map((slug) => ({
       url: `${BASE_URL}/services/${slug}`,
       lastModified,
