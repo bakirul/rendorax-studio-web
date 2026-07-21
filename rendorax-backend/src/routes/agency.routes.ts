@@ -16,6 +16,7 @@ import pictureLockRouter from "./picture-lock.routes";
 import masterDeliveryRouter from "./master-delivery.routes";
 import projectRequestsRouter from "./project-requests.routes";
 import clientOrganizationRouter from "./client-organization.routes";
+import timelineRequestsRouter from "./timeline-requests.routes";
 
 const router = Router();
 
@@ -795,5 +796,6 @@ router.use("/video-comments", videoCommentsRouter);
 router.use("/master-delivery", masterDeliveryRouter);
 router.use("/project-requests", projectRequestsRouter);
 router.use("/client-organization", clientOrganizationRouter);
+router.use("/timeline-requests", timelineRequestsRouter);
 
 export default router;

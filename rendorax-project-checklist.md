@@ -2,12 +2,12 @@
 
 > **Generated for:** ChatGPT / AI assistant context upload  
 > **Workspace root:** `C:\Users\user\rendorax-studio`  
-> **Last updated:** July 12, 2026 (production verification complete; Admin HQ + client management synced)  
+> **Last updated:** July 20, 2026 (Phase 2A Slice 2.1 TimelineRequest hardening — local)  
 > **Do not paste secret values from this file into public channels — variable names only.**
 
-### Current project status (2026-07-12)
+### Current project status (2026-07-20)
 
-**Overall:** Admin HQ and client management are production-verified. Production frontend (Vercel) and backend (Render) are live and healthy. `main` is at commit `34af1c8`.
+**Overall:** Admin HQ and client management are production-verified. Production frontend (Vercel) and backend (Render) are live and healthy. `main` is at commit `34af1c8`. Timeline Sharing Phase 2A Slice 2 (TimelineRequest foundation) implemented locally — not committed.
 
 | Area | Status |
 |------|--------|
@@ -17,7 +17,7 @@
 | Client management | **Complete** — provisioning, professional client list, role assignment validation |
 | Dashboard / vault | **Stable** — local QA complete; some production workflows still pending §14 |
 | Operations Core WP2+ | **Pending** — WP1 schema complete; next work package not started |
-| Timeline Sharing Phase 2+ | **Pending** |
+| Timeline Sharing Phase 2A | **Slice 2.1 local** — foundation + partial unique index + 409 race mapping; HTTP E2E blocked (no E2E_* passwords); P3005 baseline still pending |
 
 ### Recent milestones (July 2026)
 
@@ -35,7 +35,7 @@ The **2026-07-04 design/UI regression freeze** is **partially superseded** for A
 | Still gated | Unblocked |
 |-------------|-----------|
 | Operations Core WP2+ (awaiting explicit approval) | Admin HQ UI polish and client management |
-| Timeline Sharing Phase 2+ | Inspection / documentation |
+| Timeline Sharing Phase 2A Slice 3+ (transitions/UI/Socket); P3005 Migrate baseline | Timeline Sharing Phase 2A Slice 1–2.1 (domain + foundation + open unique index) |
 | Broad dashboard redesign | Approved bug fixes and UX clarity on existing surfaces |
 
 **WP1 Prisma schema:** Complete. No schema changes were required for the July 12 Admin HQ UI bundle (`34af1c8`).
@@ -687,7 +687,11 @@ Each item appears **once**. Production-specific checks are in §14 unless listed
 - [ ] **Operations core Phase 1 — WP2+** — **Pending** — WP1 complete; resume when explicitly approved
 - [ ] ~~Configure Supabase Storage bucket `client-vault` for Admin HQ~~ — **superseded** by client discovery migration (bucket not required for admin; legacy routes only)
 - [x] **Admin dashboard HQ fixes** — client discovery, P1 tables, phase/billing/brief — **production verified (2026-07-12)**
-- [ ] **Timeline Sharing — Phase 2+** — implement per `timeline-sharing-production-readiness.md` (collaboration → agency → production); audit complete 2026-07-04
+- [x] **Timeline Sharing Phase 2A — Slice 1** — domain validation: persistent `TimelineRequest` only; `TimelineSession` deferred (2026-07-20)
+- [x] **Timeline Sharing Phase 2A — Slice 2** — `TimelineRequest` Prisma model + additive migration SQL + create/list/get REST + Next proxies — **local verified (2026-07-20)**; no lifecycle transitions, UI, or Socket.IO changes
+- [x] **Timeline Sharing Phase 2A — Slice 2.1** — immutable project-snapshot docs; partial unique index `TimelineRequest_requester_asset_open_uidx`; POST unique-violation → 409; baseline runbook (`timeline-request-migrate-baseline-runbook.md`); HTTP script `scripts/test-timeline-requests-api.ts` — **auth matrix blocked** (E2E_* passwords unset); index verified in DB
+- [ ] **Timeline Sharing Phase 2A — Slice 3+** — accept/decline/cancel/start/end transitions, UI, Socket notify (awaiting approval)
+- [ ] **Timeline Sharing — Phase 2+ (legacy readiness doc)** — collaboration → agency → production per `timeline-sharing-production-readiness.md`
 - [ ] **Timeline Sharing (OTS / Live Editing Share) — Phase 1 manual verify** — two-browser Go Live test per `timeline-sharing-restoration-blueprint.md` §10
 - [x] **GlobalLiveWidget logged-out visitor flow** — logged-out "Talk to Rendorax" CTA opens existing `ContactForm` in a new `ContactModal` shell instead of redirecting to `/access`; `/access` login flow unchanged; dashboard live session (logged-in) unchanged — **implemented 2026-07-05; pending manual verify**
 
@@ -780,6 +784,9 @@ When assisting with this project, keep these constraints in mind:
 
 | Date | Decision | Rationale |
 |------|----------|-----------|
+| 2026-07-20 | Phase 2A Slice 2.1 — TimelineRequest hardening | Immutable `agencyProjectId` snapshot invariant documented; partial unique index on open `(requesterId, assetId)`; DB race → 409; P3005 baseline runbook only (not executed); HTTP E2E blocked without E2E passwords |
+| 2026-07-20 | Phase 2A Slice 2 — TimelineRequest foundation | Additive `TimelineRequest` + `TimelineRequestStatus`; create/list/get under `/api/agency/timeline-requests`; Next proxies; no transitions/UI/Socket; `TimelineSession` deferred; local `db push` + backend/frontend typecheck pass |
+| 2026-07-20 | Phase 2A Slice 1 — TimelineRequest domain only | Persist async request lifecycle; reuse ephemeral Socket.IO host/playback; no TimelineSession today |
 | 2026-07-17 | Guide Center docs aligned with homepage Real-Time Collaboration messaging | Documentation-only: `/guide/client/review-comments` pillars + workflow Review link + FAQ; no product/API/homepage changes |
 | 2026-07-17 | Guide collaboration copy corrected for translation boundary | Document verified automatic **text** chat/direction translation only; do not claim automatic video/voice/spoken translation until verified |
 | 2026-07-17 | Homepage onboarding path clarified for visitors | Compact “How projects begin” after Client Vault; Contact note; no public signup; CTA “Discuss Your Project” |

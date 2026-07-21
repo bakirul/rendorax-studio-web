@@ -50,33 +50,34 @@ model Message {
 }
 
 model MediaAsset {
-  id                String               @id @default(uuid())
-  fileName          String
-  publicUrl         String
-  thumbnailUrl      String?
-  objectKey         String?
-  mimeType          String
-  fileSize          Int?
-  folder            String?
-  userId            String?
-  agencyProjectId   String?
-  durationMs        Int?
-  width             Int?
-  height            Int?
-  frameRate         Float?
-  playbackObjectKey String?
-  playbackFormat    MediaPlaybackFormat?
-  processingStatus  MediaProcessingStatus?
-  proxyVersion      Int                  @default(1)
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
-  processingJobs         MediaProcessingJob[]
-  reviewVersionDecisions ReviewVersionDecision[]
-  pictureLockEvents      PictureLockEvent[]
-  masterDeliveryEvents   MasterDeliveryEvent[] @relation("MasterDeliveryAsset")
-  masterDeliverySources  MasterDeliveryEvent[] @relation("MasterDeliverySourceReview")
+  id                           String                        @id @default(uuid())
+  fileName                     String
+  publicUrl                    String
+  thumbnailUrl                 String?
+  objectKey                    String?
+  mimeType                     String
+  fileSize                     Int?
+  folder                       String?
+  userId                       String?
+  agencyProjectId              String?
+  durationMs                   Int?
+  width                        Int?
+  height                       Int?
+  frameRate                    Float?
+  playbackObjectKey            String?
+  playbackFormat               MediaPlaybackFormat?
+  processingStatus             MediaProcessingStatus?
+  proxyVersion                 Int                           @default(1)
+  createdAt                    DateTime                      @default(now())
+  updatedAt                    DateTime                      @updatedAt
+  processingJobs               MediaProcessingJob[]
+  reviewVersionDecisions       ReviewVersionDecision[]
+  pictureLockEvents            PictureLockEvent[]
+  masterDeliveryEvents         MasterDeliveryEvent[]         @relation("MasterDeliveryAsset")
+  masterDeliverySources        MasterDeliveryEvent[]         @relation("MasterDeliverySourceReview")
   masterDeliveryDownloadEvents MasterDeliveryDownloadEvent[]
-  agencyProject          AgencyProject?       @relation(fields: [agencyProjectId], references: [id], onDelete: SetNull)
+  timelineRequests             TimelineRequest[]
+  agencyProject                AgencyProject?                @relation(fields: [agencyProjectId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([agencyProjectId])
@@ -212,46 +213,62 @@ enum MasterDeliveryDownloadEventType {
   @@schema("public")
 }
 
+/// Client-initiated live timeline session request lifecycle (Phase 2A).
+/// Live host/playback state remains ephemeral in Socket.IO reviewRoomStates.
+enum TimelineRequestStatus {
+  pending
+  accepted
+  active
+  ended
+  declined
+  cancelled
+
+  @@schema("public")
+}
+
 /// Studio team member — `id` matches Supabase `auth.users.id`.
 model User {
-  id             String          @id
-  email          String          @unique
-  displayName    String?
-  role           AgencyRole      @default(editor)
+  id                             String                         @id
+  email                          String                         @unique
+  displayName                    String?
+  role                           AgencyRole                     @default(editor)
   /// Editor staffing metadata only — not an auth role. Null for clients/admins/legacy editors.
-  specialization String?
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  assignedTasks          Task[]
-  ownedProjects          AgencyProject[]         @relation("ProjectOwner")
-  clientProjects         AgencyProject[]         @relation("ProjectClient")
-  reviewVersionDecisions ReviewVersionDecision[]
-  pictureLockEvents      PictureLockEvent[]
-  masterDeliveryEvents   MasterDeliveryEvent[]
-  masterDeliveryDownloadEvents MasterDeliveryDownloadEvent[]
-  primaryContactOrganization ClientOrganization?
-  submittedProjectRequests   ProjectRequest[]
-  proposalsCreated           ProjectProposal[] @relation("ProposalCreatedBy")
-  proposalsApproved          ProjectProposal[] @relation("ProposalApprovedBy")
-  convertedProjectRequests   ProjectRequest[]  @relation("ProjectRequestConvertedBy")
-  organizationMemberships    ClientOrganizationMember[] @relation("ClientOrganizationMemberUser")
-  organizationInvitesSent    ClientOrganizationMember[] @relation("ClientOrganizationMemberInvitedBy")
+  specialization                 String?
+  createdAt                      DateTime                       @default(now())
+  updatedAt                      DateTime                       @updatedAt
+  assignedTasks                  Task[]
+  ownedProjects                  AgencyProject[]                @relation("ProjectOwner")
+  clientProjects                 AgencyProject[]                @relation("ProjectClient")
+  reviewVersionDecisions         ReviewVersionDecision[]
+  pictureLockEvents              PictureLockEvent[]
+  masterDeliveryEvents           MasterDeliveryEvent[]
+  masterDeliveryDownloadEvents   MasterDeliveryDownloadEvent[]
+  primaryContactOrganization     ClientOrganization?
+  submittedProjectRequests       ProjectRequest[]
+  proposalsCreated               ProjectProposal[]              @relation("ProposalCreatedBy")
+  proposalsApproved              ProjectProposal[]              @relation("ProposalApprovedBy")
+  convertedProjectRequests       ProjectRequest[]               @relation("ProjectRequestConvertedBy")
+  organizationMemberships        ClientOrganizationMember[]     @relation("ClientOrganizationMemberUser")
+  organizationInvitesSent        ClientOrganizationMember[]     @relation("ClientOrganizationMemberInvitedBy")
   organizationInvitationsCreated ClientOrganizationInvitation[]
+  timelineRequestsCreated        TimelineRequest[]              @relation("TimelineRequestRequester")
+  timelineRequestsAssigned       TimelineRequest[]              @relation("TimelineRequestAssignedEditor")
+  timelineRequestsAccepted       TimelineRequest[]              @relation("TimelineRequestAcceptedBy")
 
   @@schema("public")
 }
 
 /// Client organization. primaryContactUserId remains canonical for AgencyProject.clientId.
 model ClientOrganization {
-  id                   String           @id @default(uuid())
+  id                   String                         @id @default(uuid())
   name                 String
-  primaryContactUserId String           @unique
-  primaryContact       User             @relation(fields: [primaryContactUserId], references: [id], onDelete: Restrict)
+  primaryContactUserId String                         @unique
+  primaryContact       User                           @relation(fields: [primaryContactUserId], references: [id], onDelete: Restrict)
   projectRequests      ProjectRequest[]
   members              ClientOrganizationMember[]
   invitations          ClientOrganizationInvitation[]
-  createdAt            DateTime         @default(now())
-  updatedAt            DateTime         @updatedAt
+  createdAt            DateTime                       @default(now())
+  updatedAt            DateTime                       @updatedAt
 
   @@index([name])
   @@schema("public")
@@ -366,28 +383,29 @@ model ProjectProposal {
 }
 
 model AgencyProject {
-  id             String       @id @default(uuid())
-  title          String
-  description    String?
-  status         String       @default("Awaiting Assets")
-  deadline       DateTime?
-  videoLength    String?
-  editingStyle   String?
-  referenceLinks String?
-  ownerId        String
-  clientId       String?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  archivedAt     DateTime?
-  owner          User         @relation("ProjectOwner", fields: [ownerId], references: [id])
-  client         User?        @relation("ProjectClient", fields: [clientId], references: [id], onDelete: SetNull)
-  tasks                  Task[]
-  assets                 MediaAsset[]
-  reviewVersionDecisions ReviewVersionDecision[]
-  pictureLockEvents      PictureLockEvent[]
-  masterDeliveryEvents   MasterDeliveryEvent[]
+  id                           String                        @id @default(uuid())
+  title                        String
+  description                  String?
+  status                       String                        @default("Awaiting Assets")
+  deadline                     DateTime?
+  videoLength                  String?
+  editingStyle                 String?
+  referenceLinks               String?
+  ownerId                      String
+  clientId                     String?
+  createdAt                    DateTime                      @default(now())
+  updatedAt                    DateTime                      @updatedAt
+  archivedAt                   DateTime?
+  owner                        User                          @relation("ProjectOwner", fields: [ownerId], references: [id])
+  client                       User?                         @relation("ProjectClient", fields: [clientId], references: [id], onDelete: SetNull)
+  tasks                        Task[]
+  assets                       MediaAsset[]
+  reviewVersionDecisions       ReviewVersionDecision[]
+  pictureLockEvents            PictureLockEvent[]
+  masterDeliveryEvents         MasterDeliveryEvent[]
   masterDeliveryDownloadEvents MasterDeliveryDownloadEvent[]
-  convertedFromRequest   ProjectRequest? @relation("ProjectRequestConvertedProject")
+  timelineRequests             TimelineRequest[]
+  convertedFromRequest         ProjectRequest?               @relation("ProjectRequestConvertedProject")
 
   @@index([ownerId])
   @@index([clientId])
@@ -464,10 +482,10 @@ model MasterDeliveryEvent {
   note                String?
   createdAt           DateTime                @default(now())
 
-  mediaAsset        MediaAsset    @relation("MasterDeliveryAsset", fields: [mediaAssetId], references: [id], onDelete: Cascade)
-  agencyProject     AgencyProject @relation(fields: [agencyProjectId], references: [id], onDelete: Cascade)
-  actor             User          @relation(fields: [actorId], references: [id], onDelete: Restrict)
-  sourceReviewAsset MediaAsset?   @relation("MasterDeliverySourceReview", fields: [sourceReviewAssetId], references: [id], onDelete: SetNull)
+  mediaAsset        MediaAsset                    @relation("MasterDeliveryAsset", fields: [mediaAssetId], references: [id], onDelete: Cascade)
+  agencyProject     AgencyProject                 @relation(fields: [agencyProjectId], references: [id], onDelete: Cascade)
+  actor             User                          @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  sourceReviewAsset MediaAsset?                   @relation("MasterDeliverySourceReview", fields: [sourceReviewAssetId], references: [id], onDelete: SetNull)
   downloadEvents    MasterDeliveryDownloadEvent[]
 
   @@index([mediaAssetId, createdAt])
@@ -488,13 +506,58 @@ model MasterDeliveryDownloadEvent {
   createdAt             DateTime                        @default(now())
 
   masterDeliveryEvent MasterDeliveryEvent @relation(fields: [masterDeliveryEventId], references: [id], onDelete: Cascade)
-  mediaAsset    MediaAsset    @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
-  agencyProject AgencyProject @relation(fields: [agencyProjectId], references: [id], onDelete: Cascade)
-  actor         User          @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  mediaAsset          MediaAsset          @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+  agencyProject       AgencyProject       @relation(fields: [agencyProjectId], references: [id], onDelete: Cascade)
+  actor               User                @relation(fields: [actorId], references: [id], onDelete: Restrict)
 
   @@index([masterDeliveryEventId, createdAt])
   @@index([mediaAssetId, createdAt])
   @@index([agencyProjectId, createdAt])
   @@index([actorId, createdAt])
+  @@schema("public")
+}
+
+/// Persistent async request for a live timeline session.
+/// Does not store playback state, host election, or WebRTC — those remain in Socket.IO.
+///
+/// Project association: `agencyProjectId` is an immutable creation-time snapshot for
+/// audit, authorization, and editor queues. It must NOT be updated when MediaAsset is
+/// later moved or unlinked. Live playback rooms remain asset-scoped (`reviewRoomId`).
+///
+/// Open-request uniqueness (requesterId + assetId while pending|accepted|active) is
+/// enforced by PostgreSQL partial unique index
+/// `TimelineRequest_requester_asset_open_uidx` (not expressible in Prisma schema).
+model TimelineRequest {
+  id               String                @id @default(uuid())
+  assetId          String
+  /// Immutable project id at request creation — do not sync from later asset moves.
+  agencyProjectId  String
+  requesterId      String
+  /// Optional preferred target; null means project team (owner + assignees). Unused at create in Slice 2.
+  assignedEditorId String?
+  acceptedById     String?
+  status           TimelineRequestStatus @default(pending)
+  message          String?
+  /// Server-derived room key matching getReviewRoomId asset branch: review:asset:{assetId}
+  reviewRoomId     String
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  acceptedAt       DateTime?
+  declinedAt       DateTime?
+  startedAt        DateTime?
+  endedAt          DateTime?
+  cancelledAt      DateTime?
+  declineReason    String?
+
+  asset          MediaAsset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  agencyProject  AgencyProject @relation(fields: [agencyProjectId], references: [id], onDelete: Cascade)
+  requester      User          @relation("TimelineRequestRequester", fields: [requesterId], references: [id], onDelete: Restrict)
+  assignedEditor User?         @relation("TimelineRequestAssignedEditor", fields: [assignedEditorId], references: [id], onDelete: SetNull)
+  acceptedBy     User?         @relation("TimelineRequestAcceptedBy", fields: [acceptedById], references: [id], onDelete: SetNull)
+
+  @@index([requesterId, createdAt])
+  @@index([assetId, status])
+  @@index([agencyProjectId, status, createdAt])
+  @@index([status, createdAt])
   @@schema("public")
 }
